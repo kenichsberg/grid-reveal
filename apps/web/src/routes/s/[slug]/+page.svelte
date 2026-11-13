@@ -31,6 +31,13 @@
   const TABS = ['home', 'record', 'goals', 'members'] as const;
   type Tab = (typeof TABS)[number];
 
+  const TAB_LABELS: Record<Tab, string> = {
+    home: 'Home',
+    record: 'Record',
+    goals: 'Goals',
+    members: 'Members'
+  };
+
   /**
    * The open tab lives in the URL, not in component state.
    *
@@ -243,6 +250,38 @@
   <title>{screen?.title ?? 'Screen'} · Grid Reveal</title>
 </svelte:head>
 
+{#snippet tabIcon(item: Tab)}
+  <!-- Line icons on a 24-unit grid, stroked in currentColor so they take the
+       tab's active and inactive colours without a second rule. -->
+  <svg
+    class="tab-icon"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    {#if item === 'home'}
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5.5 9.5V20h13V9.5" />
+    {:else if item === 'record'}
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7v5.2l3.2 2" />
+    {:else if item === 'goals'}
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="0.6" fill="currentColor" />
+    {:else}
+      <circle cx="9" cy="9" r="3.3" />
+      <path d="M3.5 19.2c0-3 2.5-5 5.5-5s5.5 2 5.5 5" />
+      <path d="M16 6.4a3.3 3.3 0 0 1 0 6.1" />
+      <path d="M17.4 14.6c2 .6 3.3 2.3 3.3 4.6" />
+    {/if}
+  </svg>
+{/snippet}
+
 {#snippet addButton()}
   <button class="cta" onclick={() => (showEntryForm = true)}>Add Daimoku</button>
 {/snippet}
@@ -265,20 +304,24 @@
         {/if}
       </div>
 
-      <div class="stats">
-        <p class="stat">
-          <span class="label">current</span>
-          <strong>{formatHours(screen.total_minutes)}<span class="unit">h</span></strong>
-        </p>
-        <p class="stat">
-          <span class="label">goal</span>
-          <strong>{formatHours(goalMinutes(screen))}<span class="unit">h</span></strong>
-        </p>
-        <p class="stat pct"><strong>{pct}%</strong></p>
-      </div>
+      <div class="progress">
+        <p class="progress-title">Daimoku Progress</p>
 
-      <div class="meter" aria-hidden="true">
-        <div class="meter-fill" style={`width:${pct}%`}></div>
+        <div class="stats">
+          <p class="stat">
+            <span class="label">current</span>
+            <strong>{formatHours(screen.total_minutes)}<span class="unit">h</span></strong>
+          </p>
+          <p class="stat">
+            <span class="label">goal</span>
+            <strong>{formatHours(goalMinutes(screen))}<span class="unit">h</span></strong>
+          </p>
+          <p class="stat pct"><strong>{pct}%</strong></p>
+        </div>
+
+        <div class="meter" aria-hidden="true">
+          <div class="meter-fill" style={`width:${pct}%`}></div>
+        </div>
       </div>
 
       {#if timeline}<p class="timeline">{timeline}</p>{/if}
@@ -299,13 +342,8 @@
           data-sveltekit-noscroll
           data-sveltekit-replacestate={tab === 'home' ? undefined : 'true'}
         >
-          {item === 'home'
-            ? 'Home'
-            : item === 'record'
-              ? 'Record'
-              : item === 'goals'
-                ? 'Goals'
-                : 'Members'}
+          {@render tabIcon(item)}
+          <span class="tab-label">{TAB_LABELS[item]}</span>
         </a>
       {/each}
     </nav>
@@ -433,16 +471,18 @@
   .band-head {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
     min-width: 0;
+    min-height: 3rem;
   }
 
   .band-head h1 {
     flex: 1;
     min-width: 0;
     margin: 0;
-    font-size: 1rem;
+    font-size: 1.5rem;
     font-weight: 600;
+    letter-spacing: -0.01em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -450,10 +490,10 @@
 
   .back {
     color: var(--board-ink);
-    font-size: 1.5rem;
+    font-size: 2rem;
     line-height: 1;
     text-decoration: none;
-    padding: 0 0.2rem;
+    padding: 0 0.3rem;
   }
 
   .chip {
@@ -467,34 +507,49 @@
     white-space: nowrap;
   }
 
+  .progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .progress-title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
   .stats {
     display: flex;
     align-items: baseline;
-    gap: 1.1rem;
+    gap: 1.4rem;
     min-width: 0;
   }
 
   .stat {
     display: flex;
     align-items: baseline;
-    gap: 0.35rem;
+    gap: 0.4rem;
     margin: 0;
     min-width: 0;
   }
 
   .stat .label {
     color: var(--board-ink-dim);
-    font-size: 0.7rem;
-    letter-spacing: 0.04em;
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
     text-transform: lowercase;
   }
 
-  .stat strong { font-size: 1.05rem; font-weight: 600; }
-  .stat .unit { font-size: 0.78rem; font-weight: 400; opacity: 0.8; }
+  .stat strong { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+  .stat .unit { font-size: 1rem; font-weight: 500; opacity: 0.85; }
   .pct { margin-left: auto; }
+  .pct strong { font-size: 1.35rem; font-weight: 600; }
 
   .meter {
-    height: 3px;
+    height: 8px;
     border-radius: 999px;
     background: rgb(255 255 255 / 0.18);
     overflow: hidden;
@@ -502,6 +557,7 @@
 
   .meter-fill {
     height: 100%;
+    border-radius: 999px;
     background: var(--accent);
     transition: width 400ms ease;
   }
@@ -528,11 +584,15 @@
   .tabs a {
     display: grid;
     place-items: center;
+    align-content: center;
+    gap: 0.15rem;
     min-height: 44px;
     color: var(--board-ink-dim);
-    font-size: 0.8rem;
     text-decoration: none;
   }
+
+  .tab-icon { width: 22px; height: 22px; }
+  .tab-label { font-size: 0.68rem; letter-spacing: 0.01em; }
 
   .tabs a[aria-current='page'] {
     color: var(--board-ink);
@@ -660,7 +720,11 @@
       border-top: none;
       border-bottom: 1px solid var(--board-line);
     }
-    .tabs a { padding: 0 0.9rem; font-size: 0.9rem; }
+    /* Wide: the icon sits beside its label rather than above it, so the strip
+       stays one row tall. */
+    .tabs a { grid-auto-flow: column; gap: 0.4rem; padding: 0 0.9rem; }
+    .tabs .tab-label { font-size: 0.85rem; }
+    .tabs .tab-icon { width: 18px; height: 18px; }
 
     .panel {
       /* Its own column: nothing to stack over, and no width transition — the

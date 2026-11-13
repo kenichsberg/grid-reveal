@@ -5,10 +5,11 @@
    * A plain list, visible to every member. Managing membership stays on the
    * admin page; there is nothing to act on here. What each member has logged
    * remains private — only the screen total is shared.
+   *
+   * Only administrators carry a badge, because they are the only row anyone
+   * needs to pick out: they are who you ask about the screen.
    */
   import type { MemberSummary } from '$lib/api/types';
-  import { auth } from '$lib/stores/auth.svelte';
-  import { formatDate } from '$lib/format';
 
   type Props = {
     members: MemberSummary[] | null;
@@ -35,13 +36,8 @@
     <ul>
       {#each members as member (member.user_id)}
         <li>
-          <span class="name">
-            {member.username}
-            {#if member.username === auth.user?.username}
-              <span class="you">you</span>
-            {/if}
-          </span>
-          <span class="muted small">Joined {formatDate(member.joined_at.slice(0, 10))}</span>
+          <span class="name">{member.username}</span>
+          {#if member.is_admin}<span class="badge">admin</span>{/if}
         </li>
       {/each}
     </ul>
@@ -59,9 +55,8 @@
 
   li {
     display: flex;
-    justify-content: space-between;
     align-items: baseline;
-    gap: 0.75rem;
+    gap: 0.5rem;
     padding: 0.6rem 0.8rem;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -69,16 +64,13 @@
   }
 
   .name {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.4rem;
     font-weight: 500;
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  .you {
-    padding: 0.05rem 0.35rem;
+  .badge {
+    padding: 0.05rem 0.4rem;
     border-radius: 999px;
     background: var(--surface-2);
     color: var(--text-muted);

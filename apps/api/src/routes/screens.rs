@@ -468,11 +468,13 @@ async fn members(
 ) -> AppResult<Json<Vec<MemberSummary>>> {
     let screen = access::screen_for_viewer(&state.db, &slug, &auth.user).await?;
 
-    let rows = sqlx::query_as::<_, (Uuid, String, chrono::DateTime<chrono::Utc>)>(
-        "SELECT u.id, u.username, m.joined_at
+    // Administrators first, then alphabetically: the list is read to find out
+    // who to ask about the screen as often as to see who is taking part.
+    let rows = sqlx::query_as::<_, (Uuid, String, chrono::DateTime<chrono::Utc>, bool)>(
+        "SELECT u.id, u.username, m.joined_at, u.is_admin
          FROM screen_members m JOIN users u ON u.id = m.user_id
          WHERE m.screen_id = $1
-         ORDER BY lower(u.username)",
+         ORDER BY u.is_admin DESC, lower(u.username)",
     )
     .bind(screen.id)
     .fetch_all(&state.db)
@@ -480,10 +482,11 @@ async fn members(
 
     Ok(Json(
         rows.into_iter()
-            .map(|(user_id, username, joined_at)| MemberSummary {
+            .map(|(user_id, username, joined_at, is_admin)| MemberSummary {
                 user_id,
                 username,
                 joined_at,
+                is_admin,
             })
             .collect(),
     ))

@@ -25,7 +25,7 @@
      means chrome never lands on the picture, whatever its aspect ratio.
      These are track sizes, so every piece of chrome owns its own space and no
      element has to know another element's height. */
-  --band-h: 4.25rem;     /* narrow: the top band */
+  --band-h: 8rem;        /* narrow: the top band (a floor; it sizes to content) */
   --tab-bar-h: 3.25rem;  /* narrow: the bottom tab bar */
   --rail-w: 15rem;       /* wide: the left rail */
   --topbar-h: 3rem;      /* wide: the tab strip */

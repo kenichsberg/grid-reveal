@@ -1,13 +1,18 @@
 /** Shared formatting helpers. */
 
-/** `135` -> `"2h 15m"`, `45` -> `"45m"`, `120` -> `"2h"`. */
+/**
+ * `135` -> `"2h 15min"`, `45` -> `"45min"`, `120` -> `"2h"`.
+ *
+ * Minutes are spelled `min`, not `m`: beside an `h` a bare `m` reads as
+ * ambiguous at a glance, and these numbers are read at a glance.
+ */
 export function formatMinutes(total: number): string {
-  if (!Number.isFinite(total) || total <= 0) return '0m';
+  if (!Number.isFinite(total) || total <= 0) return '0min';
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
-  if (hours === 0) return `${minutes}m`;
+  if (hours === 0) return `${minutes}min`;
   if (minutes === 0) return `${hours}h`;
-  return `${hours}h ${minutes}m`;
+  return `${hours}h ${minutes}min`;
 }
 
 /**
@@ -35,11 +40,18 @@ export function today(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-/** `2026-11-13` -> `13 Nov 2026`, parsed as a plain date with no timezone shift. */
+/**
+ * `2026-11-13` -> `Fri, 13 Nov 2026`, parsed as a plain date with no timezone
+ * shift.
+ *
+ * The weekday is part of the format because a practice log is read by rhythm —
+ * which days were kept — more than by date.
+ */
 export function formatDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    weekday: 'short',
     day: 'numeric',
     month: 'short',
     year: 'numeric'

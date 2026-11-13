@@ -110,7 +110,7 @@
           type="text"
           bind:value={text}
           maxlength={MAX_LEN}
-          placeholder="Add a goal…"
+          placeholder="Add my goal…"
           aria-label="New goal"
           enterkeyhint="done"
         />

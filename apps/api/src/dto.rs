@@ -331,6 +331,9 @@ pub struct MemberSummary {
     pub username: String,
     #[ts(type = "string")]
     pub joined_at: DateTime<Utc>,
+    /// Administrator of the whole system, not of this screen: the role is
+    /// global. Shown so members know who to ask about the screen itself.
+    pub is_admin: bool,
 }
 
 #[derive(Debug, Deserialize, TS)]
