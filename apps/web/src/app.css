@@ -17,7 +17,48 @@
   --radius: 10px;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.06);
   --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* ——— Board shell ———
+     The board page reserves its chrome rather than floating it over the
+     picture. A letterboxed photograph leaves black bands anyway, so the bands
+     become the title and the tab bar; the difference is that reserving them
+     means chrome never lands on the picture, whatever its aspect ratio.
+     These are track sizes, so every piece of chrome owns its own space and no
+     element has to know another element's height. */
+  --band-h: 4.25rem;     /* narrow: the top band */
+  --tab-bar-h: 3.25rem;  /* narrow: the bottom tab bar */
+  --rail-w: 15rem;       /* wide: the left rail */
+  --topbar-h: 3rem;      /* wide: the tab strip */
+  --panel-w: 20rem;      /* wide: the right panel */
+
+  /* Device insets, named once. Every consumer reads these rather than calling
+     env() again, which is how the landscape notch gets handled at all. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Ink for chrome that sits on board black, independent of the light/dark
+     surface tokens: the board surround is black in both schemes. */
+  --board-ink: #ffffff;
+  --board-ink-dim: rgb(255 255 255 / 0.72);
+  --board-line: rgb(255 255 255 / 0.16);
+
+  /* Stacking bands. 0–9 in-shell chrome, 10–19 full-screen celebratory
+     layers, 20+ modals. Anything new picks a band, not a number. */
+  --z-stage-cta: 2;
+  --z-panel: 3;
 }
+
+/* Layout breakpoints. Plain CSS has no variables in media queries, so these
+   live here as documentation and are written out at each use site:
+
+     480px — a dialog stops fitting and becomes a bottom sheet
+             (EntryForm, the layout nav).
+     960px — the board shell goes two-pane: left rail, top tabs, stage, panel.
+
+   The admin pages still carry their own 520px and 560px rules; they predate
+   this list and are to be converged on 480px the next time each is touched. */
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {

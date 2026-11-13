@@ -1,6 +1,6 @@
 ## 1. Repository and Tooling Scaffold
 
-- [ ] 1.1 Initialize the git repository and create a `.gitignore` covering `.env`, `target/`, `node_modules/`, and build output
+- [x] 1.1 Initialize the git repository and create a `.gitignore` covering `.env`, `target/`, `node_modules/`, and build output
 - [x] 1.2 Create the monorepo layout with `apps/web/` and `apps/api/` directories
 - [x] 1.3 Scaffold the Rust API crate with `axum`, `tokio`, `sqlx` (postgres, macros, chrono), `argon2`, `serde`, `ts-rs`, `image`, `aws-sdk-s3`, `rand`, `tracing`
 - [x] 1.4 Scaffold the SvelteKit app with `@sveltejs/adapter-static` configured for SPA mode with a fallback page
@@ -162,3 +162,24 @@
 - [x] 16.7 Configure the Cloudflare Pages project with `apps/web` as the build root and the API base URL as a build variable
 - [ ] 16.8 Verify the end-to-end cookie flow across the web and API subdomains before considering deployment complete
 - [x] 16.9 Set up a nightly `pg_dump` to R2 and verify a restore
+
+## 17. Screen period and board tab shell
+
+- [x] 17.1 Add migration `0008_screen_timeline.sql` with nullable `starts_on`, `ends_on`, and `auto_archive_days` on `screens`, plus CHECK constraints for ordering and non-negativity
+- [x] 17.2 Add the window fields and a `ScreenPhase` with `phase`, `is_archived_on`, `auto_archive_on`, `accepts_writes`, and `covers` to `Screen`, deriving the phase from the stored window and today's date rather than storing it
+- [x] 17.3 Widen `access::ensure_writable` to take today's date and reject the upcoming, ended, and archived phases with distinct messages, so entries and goals freeze together
+- [x] 17.4 Add `access::ensure_in_window` and call it from entry creation and editing, so backdating cannot reach outside the period
+- [x] 17.5 Add a wire `Phase`, a `ScreenWindow`, and the window fields to `ScreenDetail`, `ScreenSummary`, `AdminScreenEntry`, and the create, update, and clone requests; regenerate the TypeScript contract
+- [x] 17.6 Accept and persist the window on create, update, and clone, validating it with a pure `validate_window`, and bucket the screen list on the derived archive state
+- [x] 17.7 Clear `auto_archive_days` when unarchiving, so an automatically archived screen does not retire itself again
+- [x] 17.8 Open `GET /screens/{slug}/members` to any member while keeping membership management administrator-only
+- [x] 17.9 Unit-test the phase boundaries, the write gate per phase, the window bounds, and the window validator; extend the `ScreenDetail` contract test
+- [x] 17.10 Add shell, safe-area, board-ink, and stacking tokens to `app.css` and document the 480px and 960px breakpoints
+- [x] 17.11 Add `lib/screen.ts` holding the phase policy, and `formatHours` / `formatDayMonth` to `lib/format.ts`
+- [x] 17.12 Rebuild `/s/[slug]` as a CSS grid shell: a band carrying the title, current and goal hours, meter, and period; a four-item tab bar; and a stage that gives `BoardCanvas` its box unchanged
+- [x] 17.13 Drive the selected tab from a `?tab=` query parameter so one back press returns to the board, and guard the slug effect so switching tabs does not refetch the screen
+- [x] 17.14 Convert `GoalsPanel` from a docked overlay to tab content and rename `HistoryPanel` to `RecordPanel`, replacing `archived` with `canEdit`
+- [x] 17.15 Add `MembersPanel` listing every member by username with the viewer marked
+- [x] 17.16 Rename the primary action to "Add Daimoku", centre and enlarge it, and bound the entry form's date picker by the period
+- [x] 17.17 Lay the wide viewport out as a left rail, a top tab strip, the board, and a panel column, so a tab's content sits beside the picture rather than covering it
+- [x] 17.18 Add a "Period" card to the screen creation and edit pages with start, end, and auto-archive term, and show the phase on the screen list cards

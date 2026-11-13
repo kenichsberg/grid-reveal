@@ -35,7 +35,7 @@ The system SHALL accept hours in the range 0 to 23 and minutes in the range 0 to
 
 ### Requirement: Entry date selection
 
-The system SHALL store a date for each entry, defaulting to today and selectable by the member. The date SHALL be stored as a calendar date with no time component or timezone conversion.
+The system SHALL store a date for each entry, defaulting to today and selectable by the member, and SHALL confine it to the past and to the screen's active period. The date SHALL be stored as a calendar date with no time component or timezone conversion.
 
 #### Scenario: Default date
 
@@ -51,6 +51,16 @@ The system SHALL store a date for each entry, defaulting to today and selectable
 
 - **WHEN** a member selects a date later than today
 - **THEN** the system rejects the entry and reports that future dates are not accepted
+
+#### Scenario: Date outside the screen's period rejected
+
+- **WHEN** a member selects a date before the screen's start date or after its end date
+- **THEN** the system rejects the entry and reports that the date falls outside the screen's period
+
+#### Scenario: Entry form bounds the date picker
+
+- **WHEN** a member opens the entry form on a screen with a period
+- **THEN** the date field offers only dates within that period and no later than today
 
 ### Requirement: Entry ordering for attribution
 
@@ -122,9 +132,9 @@ The system SHALL display the combined total logged time across all members to ev
 - **WHEN** a member views a screen on which several members have logged time
 - **THEN** the system displays the combined total of all non-deleted entries without attributing any portion to a named member
 
-### Requirement: Logging on completed and archived screens
+### Requirement: Logging on completed, closed, and archived screens
 
-The system SHALL continue accepting entries on a fully revealed screen and SHALL reject entries on an archived screen.
+The system SHALL continue accepting entries on a fully revealed screen, and SHALL reject entries on a screen that is archived, has not started, or whose period has ended.
 
 #### Scenario: Logging after full reveal
 
@@ -135,6 +145,16 @@ The system SHALL continue accepting entries on a fully revealed screen and SHALL
 
 - **WHEN** a member attempts to log, edit, or delete an entry on an archived screen
 - **THEN** the system rejects the request and reports that the screen is archived
+
+#### Scenario: Logging on a screen that has not started
+
+- **WHEN** a member attempts to log, edit, or delete an entry before the screen's start date
+- **THEN** the system rejects the request and reports that the period has not started
+
+#### Scenario: Logging after the period ends
+
+- **WHEN** a member attempts to log, edit, or delete an entry after the screen's end date
+- **THEN** the system rejects the request and reports that the period has ended
 
 ### Requirement: No logging on behalf of another user
 

@@ -2,12 +2,22 @@
 
 ### Requirement: Administrator creates a screen
 
-The system SHALL allow administrators, and only administrators, to create screens. A screen SHALL have a title, a background picture, a grid geometry, and a unit of time per tile.
+The system SHALL allow administrators, and only administrators, to create screens. A screen SHALL have a title, a background picture, a grid geometry, a unit of time per tile, and optionally an active period.
 
 #### Scenario: Successful creation
 
 - **WHEN** an administrator supplies a title, a picture, a target total time, and a unit time per tile
 - **THEN** the system creates the screen with a derived `cols × rows` geometry, a random slug, a fixed tile permutation, and the creating administrator as a member
+
+#### Scenario: Period set at creation
+
+- **WHEN** an administrator supplies a start date, an end date, or both at creation
+- **THEN** the system stores them, and offers a default retention term after which the screen archives itself
+
+#### Scenario: Period omitted at creation
+
+- **WHEN** an administrator supplies no dates
+- **THEN** the screen is open indefinitely
 
 #### Scenario: Title is required
 
@@ -173,33 +183,48 @@ The system SHALL provide each authenticated user a list of exactly the screens t
 - **WHEN** a user's screen list contains archived screens
 - **THEN** the system presents them in a section distinct from active screens
 
-### Requirement: Participant count is visible but member identities are not
+### Requirement: Member list is visible to every member
 
-The system SHALL display the number of participants on a screen to all its members, and SHALL disclose member identities only to administrators.
+The system SHALL disclose a screen's member list to every member of that screen, while keeping what each member has logged private.
 
-#### Scenario: Member sees the participant count
+#### Scenario: Member sees who the participants are
 
-- **WHEN** a member views a screen
-- **THEN** the system shows the number of participants
+- **WHEN** a member views a screen's membership
+- **THEN** the system lists each member by username, along with the number of participants
 
-#### Scenario: Member cannot see who the participants are
+#### Scenario: Managing membership stays administrative
 
-- **WHEN** a non-administrator member views a screen or queries its membership
-- **THEN** the system does not disclose the usernames of other members
+- **WHEN** a non-administrator member attempts to add or remove a member
+- **THEN** the system rejects the request with 403
 
-#### Scenario: Administrator sees the member list
+#### Scenario: Non-member cannot read the member list
 
-- **WHEN** an administrator views a screen's membership
-- **THEN** the system lists each member by username
+- **WHEN** someone who is not a member of a screen queries its membership
+- **THEN** the system answers 404, disclosing nothing about whether the slug names a real screen
+
+#### Scenario: Per-member progress stays private
+
+- **WHEN** a member views a screen's membership
+- **THEN** the system discloses no per-member breakdown of logged time; only the screen total is shared
 
 ### Requirement: Administrator edits a screen
 
-The system SHALL allow administrators to edit a screen's title, and to edit its `cols`, `rows`, and `unit_minutes` after entries exist.
+The system SHALL allow administrators to edit a screen's title, its active period, and its `cols`, `rows`, and `unit_minutes` after entries exist.
 
 #### Scenario: Title edited
 
 - **WHEN** an administrator changes a screen's title to a non-empty value
 - **THEN** the system saves it and the new title appears in the screen header and the screen list
+
+#### Scenario: Period edited
+
+- **WHEN** an administrator submits a screen's period
+- **THEN** the system replaces the stored period wholesale, so that omitting a bound clears it
+
+#### Scenario: Period edit is allowed on a closed screen
+
+- **WHEN** an administrator edits the period of a screen whose period has ended or which is archived
+- **THEN** the system accepts the edit, since extending the period is how such a screen is reopened
 
 #### Scenario: Geometry edit warns before confirmation
 

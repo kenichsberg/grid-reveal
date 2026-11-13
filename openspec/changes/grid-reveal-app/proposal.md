@@ -32,7 +32,26 @@ Grid Reveal turns logged time into a visual reward. A background picture starts 
 
 ### Modified Capabilities
 
-None. This is a greenfield repository with no existing specs.
+A later round of changes, folded into this proposal rather than tracked separately
+because nothing has shipped yet:
+
+- **screen-lifecycle** — a screen gains an optional active period. Outside it the screen
+  is read-only, keeping its board and celebration, and after a retention term it archives
+  itself, so a finished period retires without an administrator remembering it. The phase
+  is derived from the stored dates on every read rather than stored, for the same reason
+  the board is: there is no scheduler in the service, and a stored state would need one.
+- **progress-entries** — `occurred_at` is bounded by the period as well as by today, and
+  entry writes are refused in every phase but the active one.
+- **screens** — the period is set at creation, edit and clone. Membership visibility is
+  reversed: the member list is now shown to every member rather than to administrators
+  alone, while per-member logged time stays private.
+- **screen-goals** — goals move from an overlay docked to the board into a tab, and freeze
+  with everything else when a period closes.
+- **reveal-board** — the board's chrome is reserved rather than floated over the picture.
+  On a narrow viewport the letterbox becomes a title band and a tab bar; on a wide one the
+  same content becomes a rail, a tab strip and a panel column. The picture is consequently
+  smaller than it was, which is the deliberate trade for chrome that never lands on the
+  photograph.
 
 ## Impact
 

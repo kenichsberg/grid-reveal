@@ -19,6 +19,11 @@ The system SHALL allow administrators, and only administrators, to clone an exis
 - **WHEN** a clone is created
 - **THEN** it has no progress entries, a newly generated permutation, a revealed count of zero, and its own unique slug
 
+#### Scenario: Clone does not inherit the period
+
+- **WHEN** an administrator clones a screen
+- **THEN** the new screen takes whatever period the administrator gives it rather than the source's, because a clone is a new period rather than a copy
+
 #### Scenario: Source screen is unaffected
 
 - **WHEN** a clone is created
@@ -81,14 +86,111 @@ The system SHALL allow administrators to archive a screen, making it read-only w
 - **WHEN** a non-administrator attempts to archive a screen
 - **THEN** the system rejects the request with 403
 
+#### Scenario: Archiving a screen whose period is still open
+
+- **WHEN** an administrator archives a screen before its end date
+- **THEN** the screen becomes read-only immediately, regardless of its period
+
+### Requirement: Screen has an optional active period
+
+The system SHALL allow administrators to give a screen a start date, an end date, or both, bounding the days on which progress may be logged against it.
+
+#### Scenario: A screen without a period stays open
+
+- **WHEN** a screen has neither a start date nor an end date
+- **THEN** it accepts progress indefinitely, exactly as a screen created before periods existed
+
+#### Scenario: Before the period opens
+
+- **WHEN** a member opens a screen whose start date has not arrived
+- **THEN** the board, goals, and member list are displayed, the screen reports that it has not started, and any attempt to add, edit, or delete an entry or a goal is rejected
+
+#### Scenario: Within the period
+
+- **WHEN** today falls on or between the start and end dates
+- **THEN** the screen accepts entries and goals
+
+#### Scenario: End date cannot precede the start date
+
+- **WHEN** an administrator submits a period whose end date falls before its start date
+- **THEN** the system rejects the request and reports that the end date cannot fall before the start date
+
+#### Scenario: Administrator edits the period
+
+- **WHEN** an administrator changes a screen's period
+- **THEN** the new dates take effect immediately, and extending the end date of a closed screen makes it writable again
+
+### Requirement: Closed period makes a screen read-only
+
+The system SHALL freeze a screen once its end date has passed, keeping the board and any completion celebration visible while refusing every change.
+
+#### Scenario: Entries are frozen
+
+- **WHEN** a member attempts to add, edit, or delete an entry on a screen whose period has ended
+- **THEN** the system rejects the request and reports that the period has ended
+
+#### Scenario: Goals are frozen
+
+- **WHEN** a member attempts to add or delete a goal on a screen whose period has ended
+- **THEN** the system rejects the request and reports that the period has ended
+
+#### Scenario: Board remains visible
+
+- **WHEN** a member opens a screen whose period has ended
+- **THEN** the revealed tiles, total logged time, goals, and member list are displayed as they stood when the period closed
+
+#### Scenario: Completion is still celebrated
+
+- **WHEN** a member opens a fully revealed screen whose period has ended
+- **THEN** the completion celebration is shown
+
+#### Scenario: Ended screen stays in the active list
+
+- **WHEN** a screen's period has ended but it has not been archived
+- **THEN** it remains in the active section of each member's screen list, labelled with the date it ended
+
+### Requirement: Screen archives itself after a retention term
+
+The system SHALL archive a screen automatically once an administrator-set number of days has passed since its end date, so that a finished period retires without an administrator having to remember it.
+
+#### Scenario: Setting a retention term
+
+- **WHEN** an administrator sets a period with an end date
+- **THEN** they may also set the number of days the screen stays visible after that date before archiving itself, leaving it unset to mean never
+
+#### Scenario: Retention term expires
+
+- **WHEN** more days have passed since a screen's end date than its retention term allows
+- **THEN** the screen reports itself as archived and appears in the archived section of each member's screen list
+
+#### Scenario: Retention term requires an end date
+
+- **WHEN** an administrator sets a retention term on a screen with no end date
+- **THEN** the system rejects the request and reports that the term needs an end date to count from
+
+#### Scenario: Retention term is not negative
+
+- **WHEN** an administrator sets a negative retention term
+- **THEN** the system rejects the request
+
 ### Requirement: Administrator unarchives a screen
 
 The system SHALL allow administrators to return an archived screen to active status.
 
 #### Scenario: Unarchiving restores writability
 
-- **WHEN** an administrator unarchives a screen
+- **WHEN** an administrator unarchives a screen whose period is still open
 - **THEN** the screen returns to the active section of members' screen lists and accepts entries and goals again
+
+#### Scenario: Unarchiving cancels the automatic archive
+
+- **WHEN** an administrator unarchives a screen that archived itself when its retention term expired
+- **THEN** the retention term is cleared, so the screen does not archive itself again
+
+#### Scenario: Unarchiving does not reopen a closed period
+
+- **WHEN** an administrator unarchives a screen whose end date has passed
+- **THEN** the screen returns to the active list but stays read-only until the period is extended
 
 ### Requirement: Screen deletion requires explicit confirmation
 

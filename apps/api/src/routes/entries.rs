@@ -120,8 +120,9 @@ async fn create(
     Path(slug): Path<String>,
     Json(body): Json<CreateEntryRequest>,
 ) -> AppResult<Json<SubmitEntryResponse>> {
+    let today = Utc::now().date_naive();
     let screen = access::screen_for_viewer(&state.db, &slug, &auth.user).await?;
-    access::ensure_writable(&screen)?;
+    access::ensure_writable(&screen, today)?;
 
     // Members log time; an administrator who is not a member may view the
     // screen but has nothing to contribute to it.
@@ -133,6 +134,7 @@ async fn create(
 
     let minutes = to_minutes(body.hours, body.minutes)?;
     let occurred_at = resolve_date(body.occurred_at)?;
+    access::ensure_in_window(&screen, occurred_at)?;
     let note = validate_note(body.note)?;
 
     let mut tx = state.db.begin().await?;
@@ -216,10 +218,11 @@ async fn update(
     Json(body): Json<UpdateEntryRequest>,
 ) -> AppResult<Json<EntrySummary>> {
     let (entry, screen) = own_entry(&state, id, auth.user.id).await?;
-    access::ensure_writable(&screen)?;
+    access::ensure_writable(&screen, Utc::now().date_naive())?;
 
     let minutes = to_minutes(body.hours, body.minutes)?;
     let occurred_at = resolve_date(body.occurred_at)?;
+    access::ensure_in_window(&screen, occurred_at)?;
     let note = validate_note(body.note)?;
 
     let updated = sqlx::query_as::<_, Entry>(
@@ -244,7 +247,7 @@ async fn destroy(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
     let (entry, screen) = own_entry(&state, id, auth.user.id).await?;
-    access::ensure_writable(&screen)?;
+    access::ensure_writable(&screen, Utc::now().date_naive())?;
 
     sqlx::query("UPDATE entries SET deleted_at = now() WHERE id = $1")
         .bind(entry.id)

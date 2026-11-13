@@ -61,14 +61,14 @@ The system SHALL be able to determine which member's entry revealed each tile, a
 - **WHEN** a member views the board
 - **THEN** no tile indicates who revealed it, and the API returns no per-tile attribution to non-administrators
 
-### Requirement: Board rendering fills the viewport
+### Requirement: Board rendering fills the board area
 
-The system SHALL display the background picture scaled to fit entirely within the browser viewport, with the tile grid overlaying exactly the picture's area.
+The system SHALL display the background picture scaled to fit entirely within the board area — the viewport less the screen's own chrome — with the tile grid overlaying exactly the picture's area, and SHALL never introduce page scrolling.
 
 #### Scenario: Picture letterboxed to fit
 
-- **WHEN** a screen is displayed in a viewport whose aspect ratio differs from the picture's
-- **THEN** the picture is scaled to fit entirely within the viewport and the remaining area is letterboxed
+- **WHEN** a screen is displayed in a board area whose aspect ratio differs from the picture's
+- **THEN** the picture is scaled to fit entirely within the board area and the remaining area is letterboxed
 
 #### Scenario: Grid aligns to the picture
 
@@ -79,6 +79,40 @@ The system SHALL display the background picture scaled to fit entirely within th
 
 - **WHEN** the browser window is resized
 - **THEN** the picture and grid rescale together and remain aligned
+
+#### Scenario: Board area shrinks when a tab panel opens
+
+- **WHEN** a member selects a tab that occupies part of the board area on a wide viewport
+- **THEN** the picture re-letterboxes into the smaller area and stays aligned with its grid
+
+### Requirement: Board chrome is reserved, not overlaid
+
+The system SHALL reserve the screen's chrome outside the board area rather than floating it over the picture, so that no control lands on the photograph whatever its aspect ratio.
+
+#### Scenario: Narrow viewport
+
+- **WHEN** a member opens a screen on a narrow viewport
+- **THEN** a band above the board carries the title, the current and goal hours, a progress meter, and the period, and a tab bar below it carries the board, record, goals, and member tabs
+
+#### Scenario: Current and goal hours
+
+- **WHEN** the band is displayed
+- **THEN** it shows the hours logged by everyone on the screen as "current", and the hours needed to reveal every tile as "goal", both in hours
+
+#### Scenario: Wide viewport
+
+- **WHEN** a member opens a screen on a wide viewport
+- **THEN** the title, hours, meter, and period move to a rail beside the board, the tabs move to a strip above it, and a selected tab's content takes a column beside the board rather than covering it
+
+#### Scenario: Primary action placement
+
+- **WHEN** progress may be logged
+- **THEN** the control that opens the entry form is centred above the tab bar on a narrow viewport and placed in the rail on a wide one
+
+#### Scenario: Primary action withheld
+
+- **WHEN** progress may not be logged because the screen has not started, its period has ended, or it is archived
+- **THEN** the control is absent and the reason is stated in its place
 
 ### Requirement: Cover tile appearance
 

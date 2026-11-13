@@ -4,4 +4,9 @@ export type CreateScreenRequest = { title: string, picture_id: string, target_to
 /**
  * Optional override from the creation preview.
  */
-cols: number | null, };
+cols: number | null, 
+/**
+ * The active period. All three may be omitted, leaving the screen open
+ * indefinitely, which is how every screen behaved before windows existed.
+ */
+starts_on: string | null, ends_on: string | null, auto_archive_days: number | null, };

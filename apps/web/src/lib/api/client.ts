@@ -197,7 +197,8 @@ export const api = {
     return request<GeometryPreview>(`/screens/geometry-preview?${query}`);
   },
 
-  // Membership (admin)
+  // Membership (managing it is admin-only; the member list is not)
+  /** Readable by any member of the screen; the rest of this group is not. */
   listMembers: (slug: string) => request<MemberSummary[]>(`/screens/${slug}/members`),
   addMember: (slug: string, body: AddMemberRequest) =>
     request<unknown>(`/screens/${slug}/members`, { method: 'POST', body }),

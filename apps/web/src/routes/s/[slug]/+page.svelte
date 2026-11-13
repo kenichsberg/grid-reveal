@@ -1,19 +1,53 @@
 <script lang="ts">
+  /**
+   * The board, and the three things that surround it.
+   *
+   * The chrome is RESERVED, not floated over the picture: the shell is a grid
+   * whose middle track is the board, so the letterbox a photograph would have
+   * produced anyway becomes the title band and the tab bar. BoardCanvas sizes
+   * itself from a ResizeObserver on its own element, so giving it a smaller box
+   * is all it takes — none of the letterbox maths changes.
+   */
+  import { untrack } from 'svelte';
   import { page } from '$app/state';
   import { api, ApiError, pictureUrl } from '$lib/api/client';
-  import type { EntrySummary, GoalSummary, ScreenDetail } from '$lib/api/types';
+  import type {
+    EntrySummary,
+    GoalSummary,
+    MemberSummary,
+    ScreenDetail
+  } from '$lib/api/types';
   import BoardCanvas from '$lib/components/BoardCanvas.svelte';
   import Celebration from '$lib/components/Celebration.svelte';
   import EntryForm from '$lib/components/EntryForm.svelte';
   import GoalsPanel from '$lib/components/GoalsPanel.svelte';
-  import HistoryPanel from '$lib/components/HistoryPanel.svelte';
-  import { formatMinutes, percent } from '$lib/format';
+  import MembersPanel from '$lib/components/MembersPanel.svelte';
+  import RecordPanel from '$lib/components/RecordPanel.svelte';
+  import { formatHours, formatMinutes, percent } from '$lib/format';
+  import { blockedReason, canEditGoals, canLog, goalMinutes, timelineLabel } from '$lib/screen';
 
   const slug = $derived(page.params.slug!);
+
+  const TABS = ['home', 'record', 'goals', 'members'] as const;
+  type Tab = (typeof TABS)[number];
+
+  /**
+   * The open tab lives in the URL, not in component state.
+   *
+   * This is a tab bar on a phone, so the system back gesture has to close a
+   * panel rather than leave the screen. Anything else and one careless swipe
+   * loses the board. An unrecognised value falls back to Home without
+   * rewriting the URL, because rewriting it invites a navigation loop.
+   */
+  const tab = $derived.by<Tab>(() => {
+    const requested = page.url.searchParams.get('tab') ?? '';
+    return (TABS as readonly string[]).includes(requested) ? (requested as Tab) : 'home';
+  });
 
   let screen = $state<ScreenDetail | null>(null);
   let goals = $state<GoalSummary[]>([]);
   let entries = $state<EntrySummary[] | null>(null);
+  let members = $state<MemberSummary[] | null>(null);
   let loadError = $state('');
 
   let board = $state<ReturnType<typeof BoardCanvas> | null>(null);
@@ -23,15 +57,19 @@
   let formBusy = $state(false);
   let formError = $state('');
 
-  let showHistory = $state(false);
   let celebrationDismissed = $state(false);
 
   const pct = $derived(
     screen ? percent(screen.revealed_count, screen.total_tiles) : 0
   );
 
+  const writable = $derived(screen !== null && canLog(screen));
+  const goalsWritable = $derived(screen !== null && canEditGoals(screen));
+  const timeline = $derived(screen ? timelineLabel(screen) : null);
+  const blocked = $derived(screen ? blockedReason(screen) : null);
+
   // The celebration shows for everyone on every visit, until dismissed for
-  // this visit.
+  // this visit. A closed period does not retract it: the board was finished.
   const showCelebration = $derived(
     screen !== null && screen.completed && !celebrationDismissed
   );
@@ -57,26 +95,67 @@
     }
   }
 
+  // Guarded on the slug itself, not merely derived from it: switching tabs is a
+  // query-string navigation, and without this the board would blank and refetch
+  // on every tap of the tab bar.
+  let loadedSlug = '';
   $effect(() => {
-    void slug;
+    if (slug === loadedSlug) return;
+    loadedSlug = slug;
     screen = null;
     entries = null;
+    members = null;
     celebrationDismissed = false;
     load();
   });
 
+  let loadingEntries = false;
   async function loadEntries() {
+    loadingEntries = true;
     try {
       entries = await api.listEntries(slug);
     } catch (e) {
       console.error(e);
       entries = [];
+    } finally {
+      loadingEntries = false;
     }
   }
 
-  function openHistory() {
-    showHistory = true;
-    if (entries === null) loadEntries();
+  let loadingMembers = false;
+  async function loadMembers() {
+    loadingMembers = true;
+    try {
+      members = await api.listMembers(slug);
+    } catch (e) {
+      console.error(e);
+      members = [];
+    } finally {
+      loadingMembers = false;
+    }
+  }
+
+  // Both lists stay lazy; only the trigger moved from a button to a tab. The
+  // untrack is load-bearing: each effect writes the same state it reads, so
+  // without it the assignment would retrigger the effect.
+  $effect(() => {
+    if (tab !== 'record') return;
+    void slug;
+    untrack(() => {
+      if (entries === null && !loadingEntries) void loadEntries();
+    });
+  });
+
+  $effect(() => {
+    if (tab !== 'members') return;
+    void slug;
+    untrack(() => {
+      if (members === null && !loadingMembers) void loadMembers();
+    });
+  });
+
+  function tabHref(next: Tab): string {
+    return next === 'home' ? `/s/${slug}` : `/s/${slug}?tab=${next}`;
   }
 
   /**
@@ -150,7 +229,6 @@
 
   function startEdit(entry: EntrySummary) {
     editing = entry;
-    showHistory = false;
     showEntryForm = true;
   }
 
@@ -165,6 +243,10 @@
   <title>{screen?.title ?? 'Screen'} · Grid Reveal</title>
 </svelte:head>
 
+{#snippet addButton()}
+  <button class="cta" onclick={() => (showEntryForm = true)}>Add Daimoku</button>
+{/snippet}
+
 {#if loadError}
   <main class="container">
     <p class="error" role="alert">{loadError}</p>
@@ -173,64 +255,103 @@
 {:else if !screen}
   <main class="container"><p class="muted">Loading…</p></main>
 {:else}
-  <div class="screen">
-    <BoardCanvas
-      bind:this={board}
-      src={pictureUrl(screen.picture_url)}
-      pictureWidth={screen.picture_width}
-      pictureHeight={screen.picture_height}
-      cols={screen.cols}
-      rows={screen.rows}
-      revealed={screen.revealed_tiles}
-    />
-
-    <header class="bar top">
-      <div class="left">
+  <div class="shell" class:with-panel={tab !== 'home'}>
+    <header class="band">
+      <div class="band-head">
         <a class="back" href="/" aria-label="Back to your screens">‹</a>
-        <div>
-          <h1>{screen.title}</h1>
-          <p class="sub">
-            {screen.participant_count}
-            {screen.participant_count === 1 ? 'participant' : 'participants'}
-            {#if screen.archived}· Archived{/if}
-          </p>
-        </div>
+        <h1>{screen.title}</h1>
+        {#if screen.viewer_is_admin}
+          <a class="chip" href={`/admin/screens/${slug}`}>Manage</a>
+        {/if}
       </div>
-      {#if screen.viewer_is_admin}
-        <a class="chip" href={`/admin/screens/${slug}`}>Manage</a>
+
+      <div class="stats">
+        <p class="stat">
+          <span class="label">current</span>
+          <strong>{formatHours(screen.total_minutes)}<span class="unit">h</span></strong>
+        </p>
+        <p class="stat">
+          <span class="label">goal</span>
+          <strong>{formatHours(goalMinutes(screen))}<span class="unit">h</span></strong>
+        </p>
+        <p class="stat pct"><strong>{pct}%</strong></p>
+      </div>
+
+      <div class="meter" aria-hidden="true">
+        <div class="meter-fill" style={`width:${pct}%`}></div>
+      </div>
+
+      {#if timeline}<p class="timeline">{timeline}</p>{/if}
+
+
+      <!-- Rendered from one snippet in two slots; CSS hides whichever slot the
+           current width does not use, so the hidden copy is inert. -->
+      {#if writable}
+        <div class="rail-cta">{@render addButton()}</div>
       {/if}
     </header>
 
-    <footer class="bar bottom">
-      <div class="progress">
-        <div class="figures">
-          <strong>{formatMinutes(screen.total_minutes)}</strong>
-          <span class="sub">
-            {screen.revealed_count}/{screen.total_tiles} tiles · {pct}%
-          </span>
-        </div>
-        <div class="bar-track" aria-hidden="true">
-          <div class="bar-fill" style={`width:${pct}%`}></div>
-        </div>
-      </div>
+    <nav class="tabs" aria-label="Screen sections">
+      {#each TABS as item (item)}
+        <a
+          href={tabHref(item)}
+          aria-current={tab === item ? 'page' : undefined}
+          data-sveltekit-noscroll
+          data-sveltekit-replacestate={tab === 'home' ? undefined : 'true'}
+        >
+          {item === 'home'
+            ? 'Home'
+            : item === 'record'
+              ? 'Record'
+              : item === 'goals'
+                ? 'Goals'
+                : 'Members'}
+        </a>
+      {/each}
+    </nav>
 
-      <div class="row">
-        <button class="chip" onclick={openHistory}>History</button>
-        {#if !screen.archived}
-          <button class="chip primary" onclick={() => (showEntryForm = true)}>
-            Add progress
-          </button>
+    <div class="stage">
+      <BoardCanvas
+        bind:this={board}
+        src={pictureUrl(screen.picture_url)}
+        pictureWidth={screen.picture_width}
+        pictureHeight={screen.picture_height}
+        cols={screen.cols}
+        rows={screen.rows}
+        revealed={screen.revealed_tiles}
+      />
+
+      {#if tab === 'home'}
+        {#if writable}
+          <div class="stage-cta">{@render addButton()}</div>
+        {:else if blocked}
+          <p class="stage-note">{blocked}</p>
         {/if}
-      </div>
-    </footer>
+      {/if}
+    </div>
 
-    <GoalsPanel
-      {slug}
-      {goals}
-      viewerIsAdmin={screen.viewer_is_admin}
-      archived={screen.archived}
-      onchange={(next) => (goals = next)}
-    />
+    {#if tab !== 'home'}
+      <section class="panel" tabindex="-1" aria-label={tab === 'record' ? 'Your progress' : tab === 'goals' ? 'Goals' : 'Members'}>
+        {#if tab === 'record'}
+          <RecordPanel
+            {entries}
+            canEdit={writable}
+            onedit={startEdit}
+            ondelete={deleteEntry}
+          />
+        {:else if tab === 'goals'}
+          <GoalsPanel
+            {slug}
+            {goals}
+            viewerIsAdmin={screen.viewer_is_admin}
+            canEdit={goalsWritable}
+            onchange={(next) => (goals = next)}
+          />
+        {:else}
+          <MembersPanel {members} participantCount={screen.participant_count} />
+        {/if}
+      </section>
+    {/if}
 
     {#if showCelebration}
       <Celebration
@@ -248,131 +369,306 @@
         {editing}
         busy={formBusy}
         error={formError}
+        minDate={screen.starts_on}
+        maxDate={screen.ends_on}
         onsubmit={submitEntry}
         oncancel={closeForm}
       />
     {/key}
   {/if}
-
-  {#if showHistory}
-    <HistoryPanel
-      {entries}
-      archived={screen.archived}
-      onedit={startEdit}
-      ondelete={deleteEntry}
-      onclose={() => (showHistory = false)}
-    />
-  {/if}
 {/if}
 
 <style>
-  .screen {
+  .shell {
     position: fixed;
-    inset: 0;
+    /* Height rather than `inset: 0`: on iOS Safari `inset` resolves against the
+       large viewport, which would put the tab bar under the browser toolbar.
+       The shell never scrolls, so the toolbars stay expanded and 100dvh is
+       stable — no resize churn behind the canvas. */
+    inset: 0 0 auto 0;
+    height: 100dvh;
     overflow: hidden;
+    background: #000;
+    color: var(--board-ink);
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    /* The band sizes to its own content rather than to a fixed track: the
+       title, the stats, the meter and the period line are a variable number of
+       rows, and a guessed height clips them. --band-h is only a floor. */
+    grid-template-rows:
+      auto
+      minmax(0, 1fr)
+      calc(var(--tab-bar-h) + var(--safe-bottom));
+    grid-template-areas: 'band' 'stage' 'tabs';
+  }
+
+  /* BoardCanvas's own `.board` is absolute/inset:0, so this element is both its
+     containing block and its ResizeObserver target. The `minmax(0, 1fr)` above
+     and these `min-*: 0` are what let the track actually shrink. */
+  .stage {
+    grid-area: stage;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* ——— band ——— */
+
+  .band {
+    grid-area: band;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.35rem;
+    min-width: 0;
+    min-height: calc(var(--band-h) + var(--safe-top));
+    padding:
+      calc(0.5rem + var(--safe-top))
+      calc(12px + var(--safe-right))
+      0.55rem
+      calc(12px + var(--safe-left));
+  }
+
+  .band-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .band-head h1 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .back {
+    color: var(--board-ink);
+    font-size: 1.5rem;
+    line-height: 1;
+    text-decoration: none;
+    padding: 0 0.2rem;
+  }
+
+  .chip {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--board-line);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.08);
+    color: var(--board-ink);
+    font-size: 0.78rem;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .stats {
+    display: flex;
+    align-items: baseline;
+    gap: 1.1rem;
+    min-width: 0;
+  }
+
+  .stat {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .stat .label {
+    color: var(--board-ink-dim);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+  }
+
+  .stat strong { font-size: 1.05rem; font-weight: 600; }
+  .stat .unit { font-size: 0.78rem; font-weight: 400; opacity: 0.8; }
+  .pct { margin-left: auto; }
+
+  .meter {
+    height: 3px;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.18);
+    overflow: hidden;
+  }
+
+  .meter-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 400ms ease;
+  }
+
+  .timeline {
+    margin: 0;
+    color: var(--board-ink-dim);
+    font-size: 0.75rem;
+  }
+
+  .rail-cta { display: none; }
+
+  /* ——— tabs ——— */
+
+  .tabs {
+    grid-area: tabs;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    padding-bottom: var(--safe-bottom);
+    border-top: 1px solid var(--board-line);
     background: #000;
   }
 
-  .bar {
-    position: absolute;
-    left: 0;
-    right: 0;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.7rem 12px;
-    color: #fff;
-    pointer-events: none;
-  }
-
-  .bar :global(a),
-  .bar button {
-    pointer-events: auto;
-  }
-
-  .top {
-    top: 0;
-    padding-top: calc(0.7rem + env(safe-area-inset-top));
-    background: linear-gradient(to bottom, rgb(0 0 0 / 0.55), transparent);
-  }
-
-  .bottom {
-    bottom: 0;
-    /* Clear of the goals tab, which docks to the same edge. */
-    padding-bottom: calc(2.6rem + env(safe-area-inset-bottom));
-    background: linear-gradient(to top, rgb(0 0 0 / 0.6), transparent);
-    align-items: flex-end;
-  }
-
-  .left { display: flex; align-items: center; gap: 0.6rem; }
-
-  .back {
-    pointer-events: auto;
+  .tabs a {
     display: grid;
     place-items: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 999px;
-    background: rgb(0 0 0 / 0.45);
-    color: #fff;
-    text-decoration: none;
-    font-size: 1.3rem;
-    line-height: 1;
-  }
-  .back:hover { background: rgb(0 0 0 / 0.65); }
-
-  h1 {
-    margin: 0;
-    font-size: 1.05rem;
-    text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
-  }
-
-  .sub {
-    margin: 0;
+    min-height: 44px;
+    color: var(--board-ink-dim);
     font-size: 0.8rem;
-    color: rgb(255 255 255 / 0.78);
-    text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
-  }
-
-  .progress { min-width: 0; flex: 1; max-width: 320px; }
-  .figures { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
-  .figures strong { text-shadow: 0 1px 3px rgb(0 0 0 / 0.5); }
-
-  .bar-track {
-    margin-top: 0.3rem;
-    height: 4px;
-    border-radius: 999px;
-    background: rgb(255 255 255 / 0.25);
-    overflow: hidden;
-  }
-  .bar-fill { height: 100%; background: #fff; transition: width 400ms ease; }
-
-  .chip {
-    pointer-events: auto;
-    display: inline-flex;
-    align-items: center;
-    padding: 0.4rem 0.75rem;
-    border-radius: 999px;
-    border: 1px solid rgb(255 255 255 / 0.22);
-    background: rgb(0 0 0 / 0.5);
-    color: #fff;
-    font-size: 0.85rem;
     text-decoration: none;
-    cursor: pointer;
   }
-  .chip:hover { background: rgb(0 0 0 / 0.68); }
 
-  .chip.primary {
+  .tabs a[aria-current='page'] {
+    color: var(--board-ink);
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+
+  /* ——— the primary action ——— */
+
+  .stage-cta {
+    position: absolute;
+    left: 50%;
+    bottom: 1.1rem;
+    z-index: var(--z-stage-cta);
+    transform: translateX(-50%);
+  }
+
+  .cta {
+    padding: 0.85rem 1.8rem;
+    border: none;
+    border-radius: 999px;
     background: var(--accent);
-    border-color: transparent;
-    color: #fff;
+    color: var(--accent-text);
+    font: inherit;
+    font-size: 1.02rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
   }
-  .chip.primary:hover { filter: brightness(1.1); }
 
-  @media (max-width: 420px) {
-    h1 { font-size: 0.95rem; }
-    .progress { max-width: 180px; }
+  .stage-note {
+    position: absolute;
+    left: 50%;
+    bottom: 1.1rem;
+    z-index: var(--z-stage-cta);
+    transform: translateX(-50%);
+    max-width: min(26rem, calc(100% - 2rem));
+    margin: 0;
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.62);
+    color: var(--board-ink-dim);
+    font-size: 0.82rem;
+    text-align: center;
+  }
+
+  /* ——— tab panels ——— */
+
+  .panel {
+    /* Narrow: covers the board, but the band and tab bar stay put, so the
+       title and stats remain visible on every tab. */
+    grid-area: stage;
+    z-index: var(--z-panel);
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--surface);
+    color: var(--text);
+    animation: panel-in 120ms ease-out;
+  }
+
+  .panel:focus { outline: none; }
+
+  /* A CSS animation, not a Svelte transition: the global
+     prefers-reduced-motion rule clamps this, and would not reach a
+     JS-driven one. */
+  @keyframes panel-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* ——— wide: rail, top tabs, stage, panel ——— */
+
+  @media (min-width: 960px) {
+    .shell {
+      grid-template-columns: var(--rail-w) minmax(0, 1fr);
+      grid-template-rows: calc(var(--topbar-h) + var(--safe-top)) minmax(0, 1fr);
+      grid-template-areas:
+        'band tabs'
+        'band stage';
+    }
+
+    .shell.with-panel {
+      grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--panel-w);
+      grid-template-areas:
+        'band tabs  tabs'
+        'band stage panel';
+    }
+
+    .band {
+      justify-content: flex-start;
+      gap: 0.8rem;
+      overflow-y: auto;
+      padding:
+        calc(1rem + var(--safe-top))
+        1rem
+        calc(1rem + var(--safe-bottom))
+        calc(1rem + var(--safe-left));
+      border-right: 1px solid var(--board-line);
+    }
+
+    .band-head { flex-wrap: wrap; }
+    .band-head h1 {
+      flex-basis: 100%;
+      order: 2;
+      font-size: 1.2rem;
+      white-space: normal;
+      overflow: visible;
+    }
+    .chip { order: 1; margin-left: auto; }
+
+    .stats { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+    .pct { margin-left: 0; }
+
+    /* With a cursor there is no thumb to reach, so the primary action belongs
+       at the top of the rail rather than floating over the artwork. */
+    .rail-cta { display: block; }
+    .cta { width: 100%; }
+    .stage-cta { display: none; }
+
+    .tabs {
+      grid-template-columns: repeat(4, max-content);
+      justify-content: start;
+      padding: 0 0.75rem;
+      border-top: none;
+      border-bottom: 1px solid var(--board-line);
+    }
+    .tabs a { padding: 0 0.9rem; font-size: 0.9rem; }
+
+    .panel {
+      /* Its own column: nothing to stack over, and no width transition — the
+         canvas would reallocate and fully redraw on every animated frame. */
+      grid-area: panel;
+      z-index: auto;
+      border-left: 1px solid var(--border);
+      animation: none;
+    }
   }
 </style>

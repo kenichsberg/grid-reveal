@@ -80,35 +80,45 @@ The system SHALL disclose which member created a goal only to administrators.
 - **WHEN** a non-administrator member views the goal list
 - **THEN** goals they created offer a delete control, which is the only indication of their own authorship
 
-### Requirement: Collapsible goal panel overlays the board
+### Requirement: Goals are reached from the board's tab bar
 
-The system SHALL present goals in a panel that overlays the screen's picture and can be folded and unfolded, so the board continues to occupy the full viewport.
+The system SHALL present goals as one of the board's tabs, alongside the board itself, the member's own record, and the member list.
 
-#### Scenario: Panel collapsed by default
+#### Scenario: Board shown by default
 
 - **WHEN** a member opens a screen
-- **THEN** the goal panel is collapsed to a control showing the goal count, and the board occupies the full viewport
+- **THEN** the board tab is selected and the picture occupies the board area
 
-#### Scenario: Panel expanded
+#### Scenario: Goals tab selected
 
-- **WHEN** a member expands the goal panel
-- **THEN** the goal list and the add-goal control appear overlaying the lower portion of the picture, without pushing the board out of the viewport or introducing page scrolling
+- **WHEN** a member selects the Goals tab
+- **THEN** the goal list and the add-goal control replace the board area on a narrow viewport, or appear beside it on a wide one, without introducing page scrolling
+
+#### Scenario: Selected tab survives reload and back
+
+- **WHEN** a member selects the Goals tab and then reloads, or navigates back
+- **THEN** reloading returns to the Goals tab and one back press returns to the board without leaving the screen
 
 #### Scenario: Goals ordered by creation
 
 - **WHEN** the goal list is displayed
 - **THEN** goals appear in the order they were created
 
-### Requirement: Goals on archived screens are read-only
+### Requirement: Goals freeze when a screen closes
 
-The system SHALL reject goal creation and deletion on an archived screen.
+The system SHALL reject goal creation and deletion on a screen that is archived, has not started, or whose period has ended.
 
 #### Scenario: Adding a goal to an archived screen
 
 - **WHEN** a member attempts to add or delete a goal on an archived screen
 - **THEN** the system rejects the request and reports that the screen is archived
 
+#### Scenario: Adding a goal after the period ends
+
+- **WHEN** a member attempts to add or delete a goal on a screen whose period has ended
+- **THEN** the system rejects the request and reports that the period has ended
+
 #### Scenario: Existing goals remain visible
 
-- **WHEN** a member views an archived screen
-- **THEN** its goals remain readable in the panel
+- **WHEN** a member views an archived or closed screen
+- **THEN** its goals remain readable in the Goals tab, without the add or delete controls

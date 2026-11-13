@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use crate::models::ScreenPhase;
+
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
@@ -131,6 +133,50 @@ pub struct GeometryPreview {
 // Screens
 // ---------------------------------------------------------------------------
 
+/// Where a screen sits in its own lifetime, as the client sees it.
+///
+/// The wire mirror of [`crate::models::ScreenPhase`]. It is derived on the
+/// server from the stored window and the current date, so the client must
+/// render this verbatim and never recompute it from the dates: the two could
+/// only ever disagree, and the client would lose.
+#[derive(Debug, Clone, Copy, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+    Upcoming,
+    Active,
+    Ended,
+    Archived,
+}
+
+impl From<ScreenPhase> for Phase {
+    fn from(phase: ScreenPhase) -> Self {
+        match phase {
+            ScreenPhase::Upcoming => Phase::Upcoming,
+            ScreenPhase::Active => Phase::Active,
+            ScreenPhase::Ended => Phase::Ended,
+            ScreenPhase::Archived => Phase::Archived,
+        }
+    }
+}
+
+/// The active period an administrator sets on a screen.
+///
+/// Carried whole on update rather than as three loose fields, so that a
+/// request can distinguish "leave the window alone" (the field is absent) from
+/// "clear this bound" (the field is present and null). Create and clone have
+/// no such ambiguity to resolve and take the three fields inline.
+#[derive(Debug, Default, Deserialize, TS)]
+#[ts(export)]
+pub struct ScreenWindow {
+    #[ts(type = "string | null")]
+    pub starts_on: Option<NaiveDate>,
+    #[ts(type = "string | null")]
+    pub ends_on: Option<NaiveDate>,
+    /// Days after `ends_on` before the screen archives itself; `null` never.
+    pub auto_archive_days: Option<i32>,
+}
+
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct CreateScreenRequest {
@@ -142,6 +188,13 @@ pub struct CreateScreenRequest {
     pub unit_minutes: i32,
     /// Optional override from the creation preview.
     pub cols: Option<i32>,
+    /// The active period. All three may be omitted, leaving the screen open
+    /// indefinitely, which is how every screen behaved before windows existed.
+    #[ts(type = "string | null")]
+    pub starts_on: Option<NaiveDate>,
+    #[ts(type = "string | null")]
+    pub ends_on: Option<NaiveDate>,
+    pub auto_archive_days: Option<i32>,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -151,6 +204,9 @@ pub struct ScreenSummary {
     pub title: String,
     pub picture_url: String,
     pub archived: bool,
+    pub phase: Phase,
+    #[ts(type = "string | null")]
+    pub ends_on: Option<NaiveDate>,
     #[ts(type = "number")]
     pub total_minutes: i64,
     pub revealed_count: i32,
@@ -169,6 +225,9 @@ pub struct AdminScreenEntry {
     pub title: String,
     pub picture_url: String,
     pub archived: bool,
+    pub phase: Phase,
+    #[ts(type = "string | null")]
+    pub ends_on: Option<NaiveDate>,
     #[ts(type = "number")]
     pub total_minutes: i64,
     pub revealed_count: i32,
@@ -208,7 +267,19 @@ pub struct ScreenDetail {
     pub revealed_count: i32,
     pub revealed_tiles: Vec<i32>,
     pub completed: bool,
+    /// True for a screen an administrator archived AND for one the automatic
+    /// archive has retired, so every existing consumer of this flag keeps
+    /// working without knowing about the window.
     pub archived: bool,
+    /// The authoritative lifecycle state. Prefer this over `archived`: it also
+    /// distinguishes a screen whose period has not opened from one whose
+    /// period has closed.
+    pub phase: Phase,
+    #[ts(type = "string | null")]
+    pub starts_on: Option<NaiveDate>,
+    #[ts(type = "string | null")]
+    pub ends_on: Option<NaiveDate>,
+    pub auto_archive_days: Option<i32>,
     /// Whether the caller may administer this screen, so the client can show
     /// or hide controls without a second request.
     pub viewer_is_admin: bool,
@@ -221,6 +292,9 @@ pub struct UpdateScreenRequest {
     pub cols: Option<i32>,
     pub rows: Option<i32>,
     pub unit_minutes: Option<i32>,
+    /// Absent leaves the window untouched. Present replaces it wholesale, so
+    /// clearing one bound means sending the window with that field null.
+    pub window: Option<ScreenWindow>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -229,6 +303,13 @@ pub struct CloneScreenRequest {
     pub title: String,
     #[ts(type = "string")]
     pub picture_id: Uuid,
+    /// A clone is a new period rather than a copy, so it gets its own window
+    /// rather than inheriting the original's.
+    #[ts(type = "string | null")]
+    pub starts_on: Option<NaiveDate>,
+    #[ts(type = "string | null")]
+    pub ends_on: Option<NaiveDate>,
+    pub auto_archive_days: Option<i32>,
 }
 
 #[derive(Debug, Deserialize, TS)]

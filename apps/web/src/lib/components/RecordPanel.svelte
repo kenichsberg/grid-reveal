@@ -3,48 +3,34 @@
    * Your own entries on this screen.
    *
    * Only ever your own: there is no leaderboard and no per-member breakdown,
-   * just the shared total shown on the board itself.
+   * just the shared total shown on the board itself. The member list is
+   * public; what each member logged is not.
+   *
+   * Tab content, not an overlay — the shell places it and the tab bar is the
+   * way out, so this owns no backdrop, no close button and no Escape key.
    */
   import type { EntrySummary } from '$lib/api/types';
   import { formatDate, formatMinutes } from '$lib/format';
 
   type Props = {
     entries: EntrySummary[] | null;
-    archived: boolean;
+    /** False once the period has closed: the list stays, the controls go. */
+    canEdit: boolean;
     onedit: (entry: EntrySummary) => void;
     ondelete: (entry: EntrySummary) => void;
-    onclose: () => void;
   };
 
-  let { entries, archived, onedit, ondelete, onclose }: Props = $props();
+  let { entries, canEdit, onedit, ondelete }: Props = $props();
 
   const total = $derived(
     (entries ?? []).reduce((sum, entry) => sum + entry.minutes, 0)
   );
-
-  function onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') onclose();
-  }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
-
-<div
-  class="backdrop"
-  role="button"
-  tabindex="-1"
-  aria-label="Close"
-  onclick={onclose}
-  onkeydown={() => {}}
-></div>
-
-<aside class="drawer" aria-label="Your progress">
+<div class="body">
   <header>
-    <div>
-      <h2>Your progress</h2>
-      <p class="muted small">{formatMinutes(total)} across {entries?.length ?? 0} entries</p>
-    </div>
-    <button class="btn btn-sm" onclick={onclose}>Close</button>
+    <h2>Your progress</h2>
+    <p class="muted small">{formatMinutes(total)} across {entries?.length ?? 0} entries</p>
   </header>
 
   {#if !entries}
@@ -61,7 +47,7 @@
             {#if entry.edited_at}<span class="muted small">· edited</span>{/if}
           </div>
           {#if entry.note}<p class="note">{entry.note}</p>{/if}
-          {#if !archived}
+          {#if canEdit}
             <div class="row actions">
               <button class="btn btn-sm" onclick={() => onedit(entry)}>Edit</button>
               <button class="btn btn-sm btn-danger" onclick={() => ondelete(entry)}>Delete</button>
@@ -71,42 +57,23 @@
       {/each}
     </ul>
   {/if}
-</aside>
+</div>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 20;
-    background: rgb(0 0 0 / 0.5);
-    border: none;
-    padding: 0;
-  }
-
-  .drawer {
-    position: fixed;
-    z-index: 21;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(380px, 100vw);
-    overflow-y: auto;
-    padding: 1.1rem 1rem calc(1.1rem + env(safe-area-inset-bottom));
-    background: var(--surface);
-    color: var(--text);
-    border-left: 1px solid var(--border);
-    box-shadow: -12px 0 40px rgb(0 0 0 / 0.25);
+  .body {
+    /* Padding lives here rather than on the shell's .panel so the scrollbar
+       tracks the panel edge, not the text column. */
+    padding: 1.1rem 1rem 2rem;
   }
 
   header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 0.75rem;
     margin-bottom: 1rem;
   }
-  header h2 { margin: 0; }
-  header p { margin: 0; }
+  header h2 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+  header p { margin: 0.15rem 0 0; }
 
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
 

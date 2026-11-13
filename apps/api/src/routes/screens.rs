@@ -1,6 +1,7 @@
 //! Screens: creation, access, membership, geometry, and lifecycle.
 
 use axum::extract::{Path, Query, State};
+use chrono::{NaiveDate, Utc};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use rand::seq::SliceRandom;
@@ -106,6 +107,35 @@ fn validate_unit(unit_minutes: i32) -> AppResult<()> {
     Ok(())
 }
 
+/// Checks an active period before it reaches the database.
+///
+/// The same rules the table's CHECK constraints enforce, stated here so the
+/// administrator gets a sentence rather than a constraint violation.
+fn validate_window(
+    starts_on: Option<NaiveDate>,
+    ends_on: Option<NaiveDate>,
+    auto_archive_days: Option<i32>,
+) -> AppResult<()> {
+    if let (Some(starts_on), Some(ends_on)) = (starts_on, ends_on) {
+        if ends_on < starts_on {
+            return Err(AppError::bad_request(
+                "the end date cannot fall before the start date",
+            ));
+        }
+    }
+    if auto_archive_days.is_some_and(|days| days < 0) {
+        return Err(AppError::bad_request(
+            "the auto-archive term cannot be negative",
+        ));
+    }
+    if auto_archive_days.is_some() && ends_on.is_none() {
+        return Err(AppError::bad_request(
+            "an auto-archive term needs an end date to count from",
+        ));
+    }
+    Ok(())
+}
+
 /// Loads a picture that may be attached to a screen. Soft-deleted pictures are
 /// refused for new screens while remaining attached to existing ones.
 async fn selectable_picture(pool: &PgPool, id: Uuid) -> AppResult<Picture> {
@@ -124,7 +154,11 @@ async fn picture_of(pool: &PgPool, id: Uuid) -> AppResult<Picture> {
         .ok_or(AppError::NotFound)
 }
 
-async fn to_summary(state: &AppState, screen: &Screen) -> AppResult<ScreenSummary> {
+async fn to_summary(
+    state: &AppState,
+    screen: &Screen,
+    today: NaiveDate,
+) -> AppResult<ScreenSummary> {
     let (total_minutes, revealed_count) = access::board_state(&state.db, screen).await?;
     let picture = picture_of(&state.db, screen.picture_id).await?;
 
@@ -132,7 +166,9 @@ async fn to_summary(state: &AppState, screen: &Screen) -> AppResult<ScreenSummar
         slug: screen.slug.clone(),
         title: screen.title.clone(),
         picture_url: state.storage.public_url(&picture.storage_key),
-        archived: screen.is_archived(),
+        archived: screen.is_archived_on(today),
+        phase: screen.phase(today).into(),
+        ends_on: screen.ends_on,
         total_minutes,
         revealed_count,
         total_tiles: screen.total_tiles(),
@@ -155,11 +191,15 @@ async fn list(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<S
     .fetch_all(&state.db)
     .await?;
 
+    // Automatic archiving is derived, not stored, so the split is made here
+    // rather than in SQL: a screen whose retention term has expired belongs in
+    // the archived section even though nothing wrote `archived_at`.
+    let today = Utc::now().date_naive();
     let mut active = Vec::new();
     let mut archived = Vec::new();
     for screen in &screens {
-        let summary = to_summary(&state, screen).await?;
-        if screen.is_archived() {
+        let summary = to_summary(&state, screen, today).await?;
+        if screen.is_archived_on(today) {
             archived.push(summary);
         } else {
             active.push(summary);
@@ -181,14 +221,17 @@ async fn directory(
         .fetch_all(&state.db)
         .await?;
 
+    let today = Utc::now().date_naive();
     let mut out = Vec::with_capacity(screens.len());
     for screen in &screens {
-        let summary = to_summary(&state, screen).await?;
+        let summary = to_summary(&state, screen, today).await?;
         out.push(AdminScreenEntry {
             slug: summary.slug,
             title: summary.title,
             picture_url: summary.picture_url,
             archived: summary.archived,
+            phase: summary.phase,
+            ends_on: summary.ends_on,
             total_minutes: summary.total_minutes,
             revealed_count: summary.revealed_count,
             total_tiles: summary.total_tiles,
@@ -208,6 +251,7 @@ async fn detail(
     let picture = picture_of(&state.db, screen.picture_id).await?;
     let (total_minutes, revealed_count) = access::board_state(&state.db, &screen).await?;
     let participant_count = access::participant_count(&state.db, screen.id).await?;
+    let today = Utc::now().date_naive();
 
     Ok(Json(ScreenDetail {
         slug: screen.slug.clone(),
@@ -226,7 +270,11 @@ async fn detail(
         // future reveal order.
         revealed_tiles: board::revealed_tiles(&screen.permutation, revealed_count),
         completed: revealed_count >= screen.total_tiles(),
-        archived: screen.is_archived(),
+        archived: screen.is_archived_on(today),
+        phase: screen.phase(today).into(),
+        starts_on: screen.starts_on,
+        ends_on: screen.ends_on,
+        auto_archive_days: screen.auto_archive_days,
         viewer_is_admin: auth.user.is_admin,
     }))
 }
@@ -267,6 +315,7 @@ async fn create(
 ) -> AppResult<Json<ScreenDetail>> {
     let title = validate_title(&body.title)?;
     validate_unit(body.unit_minutes)?;
+    validate_window(body.starts_on, body.ends_on, body.auto_archive_days)?;
 
     let picture = selectable_picture(&state.db, body.picture_id).await?;
     let solved = match body.cols {
@@ -281,8 +330,9 @@ async fn create(
 
     let screen = sqlx::query_as::<_, Screen>(
         "INSERT INTO screens
-           (slug, title, picture_id, cols, rows, unit_minutes, permutation, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+           (slug, title, picture_id, cols, rows, unit_minutes, permutation, created_by,
+            starts_on, ends_on, auto_archive_days)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *",
     )
     .bind(&slug)
     .bind(&title)
@@ -292,6 +342,9 @@ async fn create(
     .bind(body.unit_minutes)
     .bind(&permutation)
     .bind(admin.user.id)
+    .bind(body.starts_on)
+    .bind(body.ends_on)
+    .bind(body.auto_archive_days)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -311,7 +364,11 @@ async fn create(
 // Editing
 // ---------------------------------------------------------------------------
 
-/// Edits the title, and optionally the geometry.
+/// Edits the title, and optionally the geometry or the active period.
+///
+/// Deliberately not gated on [`access::ensure_writable`]: editing the window is
+/// exactly how an administrator reopens a screen whose period has closed, so
+/// refusing the edit because the period has closed would be circular.
 ///
 /// A geometry change leaves every entry untouched, so the total logged time is
 /// preserved exactly. The permutation is regenerated because the tile set
@@ -374,6 +431,23 @@ async fn update(
         .await?;
     }
 
+    // The window is replaced whole rather than field by field, so that sending
+    // it with a null bound clears that bound while omitting it entirely leaves
+    // the period alone.
+    if let Some(window) = &body.window {
+        validate_window(window.starts_on, window.ends_on, window.auto_archive_days)?;
+        sqlx::query(
+            "UPDATE screens SET starts_on = $1, ends_on = $2, auto_archive_days = $3
+             WHERE id = $4",
+        )
+        .bind(window.starts_on)
+        .bind(window.ends_on)
+        .bind(window.auto_archive_days)
+        .bind(screen.id)
+        .execute(&state.db)
+        .await?;
+    }
+
     detail(State(state), AuthUser { user: admin.user, token: admin.token }, Path(slug)).await
 }
 
@@ -381,14 +455,18 @@ async fn update(
 // Membership
 // ---------------------------------------------------------------------------
 
-/// Administrators only: members never learn who else is on a screen, only how
-/// many people there are.
+/// Every member of a screen may see who else is on it.
+///
+/// Managing that membership stays administrator-only; this is the read, and it
+/// is the one place a member learns more than the participant count. Resolved
+/// through `screen_for_viewer`, so a non-member still gets 404 rather than a
+/// 403 that would confirm the slug names a real screen.
 async fn members(
     State(state): State<AppState>,
-    admin: AdminUser,
+    auth: AuthUser,
     Path(slug): Path<String>,
 ) -> AppResult<Json<Vec<MemberSummary>>> {
-    let screen = access::screen_for_admin(&state.db, &slug, &admin.user).await?;
+    let screen = access::screen_for_viewer(&state.db, &slug, &auth.user).await?;
 
     let rows = sqlx::query_as::<_, (Uuid, String, chrono::DateTime<chrono::Utc>)>(
         "SELECT u.id, u.username, m.joined_at
@@ -513,8 +591,9 @@ async fn remove_member(
 
 /// Clones configuration, members, and goals into a fresh, fully covered board.
 ///
-/// The title and picture are not inherited: both are required, because a clone
-/// is a new period rather than a copy.
+/// The title, picture and active period are not inherited: a clone is a new
+/// period rather than a copy, so it starts with nothing revealed and whatever
+/// window the administrator gives it.
 async fn clone_screen(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -523,6 +602,7 @@ async fn clone_screen(
 ) -> AppResult<Json<ScreenDetail>> {
     let source = access::screen_for_admin(&state.db, &slug, &admin.user).await?;
     let title = validate_title(&body.title)?;
+    validate_window(body.starts_on, body.ends_on, body.auto_archive_days)?;
     let picture = selectable_picture(&state.db, body.picture_id).await?;
 
     let new_slug = unique_slug(&state.db).await?;
@@ -532,8 +612,9 @@ async fn clone_screen(
 
     let created = sqlx::query_as::<_, Screen>(
         "INSERT INTO screens
-           (slug, title, picture_id, cols, rows, unit_minutes, permutation, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+           (slug, title, picture_id, cols, rows, unit_minutes, permutation, created_by,
+            starts_on, ends_on, auto_archive_days)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *",
     )
     .bind(&new_slug)
     .bind(&title)
@@ -543,6 +624,9 @@ async fn clone_screen(
     .bind(source.unit_minutes)
     .bind(&permutation)
     .bind(admin.user.id)
+    .bind(body.starts_on)
+    .bind(body.ends_on)
+    .bind(body.auto_archive_days)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -599,13 +683,20 @@ async fn archive(
     Ok(Json(serde_json::json!({ "ok": true, "archived": true })))
 }
 
+/// Returns a screen to the active list, and stops it archiving itself again.
+///
+/// Clearing `archived_at` alone would not be enough for a screen the automatic
+/// archive retired: that state is derived from `ends_on + auto_archive_days`,
+/// so it would re-archive on the very next read. Un-archiving therefore also
+/// cancels the automatic archive. The period itself is left alone — an
+/// administrator who wants the screen writable again edits the window.
 async fn unarchive(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(slug): Path<String>,
 ) -> AppResult<Json<serde_json::Value>> {
     let screen = access::screen_for_admin(&state.db, &slug, &admin.user).await?;
-    sqlx::query("UPDATE screens SET archived_at = NULL WHERE id = $1")
+    sqlx::query("UPDATE screens SET archived_at = NULL, auto_archive_days = NULL WHERE id = $1")
         .bind(screen.id)
         .execute(&state.db)
         .await?;
@@ -683,5 +774,36 @@ mod tests {
         assert!(validate_unit(0).is_err());
         assert!(validate_unit(-5).is_err());
         assert!(validate_unit(1).is_ok());
+    }
+
+    fn date(iso: &str) -> NaiveDate {
+        iso.parse().expect("test date")
+    }
+
+    #[test]
+    fn a_window_may_be_absent_entirely() {
+        assert!(validate_window(None, None, None).is_ok());
+    }
+
+    #[test]
+    fn the_end_date_may_not_precede_the_start() {
+        assert!(validate_window(Some(date("2026-01-10")), Some(date("2026-01-09")), None).is_err());
+        assert!(validate_window(Some(date("2026-01-10")), Some(date("2026-01-10")), None).is_ok());
+        assert!(validate_window(Some(date("2026-01-10")), Some(date("2026-01-11")), None).is_ok());
+    }
+
+    #[test]
+    fn one_bound_alone_is_a_valid_window() {
+        assert!(validate_window(Some(date("2026-01-10")), None, None).is_ok());
+        assert!(validate_window(None, Some(date("2026-01-10")), None).is_ok());
+    }
+
+    #[test]
+    fn an_auto_archive_term_must_be_non_negative_and_have_an_end_to_count_from() {
+        assert!(validate_window(None, Some(date("2026-01-20")), Some(-1)).is_err());
+        assert!(validate_window(None, Some(date("2026-01-20")), Some(0)).is_ok());
+        assert!(validate_window(None, Some(date("2026-01-20")), Some(15)).is_ok());
+        // Nothing to count from, so the term could never fire.
+        assert!(validate_window(None, None, Some(15)).is_err());
     }
 }

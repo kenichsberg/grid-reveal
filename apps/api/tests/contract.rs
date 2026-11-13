@@ -5,7 +5,7 @@
 
 use grid_reveal_api::board;
 use grid_reveal_api::dto::{
-    CreateEntryRequest, CurrentUser, ScreenDetail, SubmitEntryResponse, UpdateEntryRequest,
+    CreateEntryRequest, CurrentUser, Phase, ScreenDetail, SubmitEntryResponse, UpdateEntryRequest,
     UserSummary,
 };
 use uuid::Uuid;
@@ -71,6 +71,10 @@ fn screen_detail_never_discloses_unrevealed_tiles() {
         revealed_tiles: board::revealed_tiles(&permutation, revealed_count),
         completed: false,
         archived: false,
+        phase: Phase::Active,
+        starts_on: None,
+        ends_on: None,
+        auto_archive_days: None,
         viewer_is_admin: false,
     };
 
@@ -159,4 +163,47 @@ fn entry_requests_accept_no_target_user() {
     let minimal: CreateEntryRequest = serde_json::from_value(fields).unwrap();
     assert_eq!(minimal.minutes, 1);
     assert!(minimal.occurred_at.is_none());
+}
+
+/// A closed period freezes writes; it does not hide the picture.
+///
+/// The whole point of the ended phase is that the board and its completion
+/// celebration stay visible after the period closes, so a response for an
+/// ended screen must still carry the revealed prefix it has earned.
+#[test]
+fn an_ended_screen_still_serializes_its_revealed_prefix() {
+    let permutation: Vec<i32> = vec![4, 7, 1, 9, 2, 8, 0, 3, 5, 6];
+    let revealed_count = 10;
+
+    let detail = ScreenDetail {
+        slug: "k3m9xq2p".into(),
+        title: "Team Q4".into(),
+        picture_url: "/pictures/raw/pictures/x.webp".into(),
+        picture_width: 1600,
+        picture_height: 1200,
+        cols: 5,
+        rows: 2,
+        unit_minutes: 5,
+        total_tiles: 10,
+        participant_count: 4,
+        total_minutes: 50,
+        revealed_count,
+        revealed_tiles: board::revealed_tiles(&permutation, revealed_count),
+        completed: true,
+        archived: false,
+        phase: Phase::Ended,
+        starts_on: Some("2026-01-01".parse().unwrap()),
+        ends_on: Some("2026-01-31".parse().unwrap()),
+        auto_archive_days: Some(15),
+        viewer_is_admin: false,
+    };
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&serde_json::to_string(&detail).unwrap()).unwrap();
+
+    assert_eq!(parsed["phase"], "ended");
+    assert_eq!(parsed["completed"], true);
+    assert_eq!(parsed["archived"], false);
+    assert_eq!(parsed["revealed_tiles"].as_array().unwrap().len(), 10);
+    assert_eq!(parsed["ends_on"], "2026-01-31");
 }

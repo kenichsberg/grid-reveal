@@ -9,6 +9,10 @@
     editing?: EntrySummary | null;
     busy: boolean;
     error: string;
+    /** First day the screen's period covers, if it has one. */
+    minDate?: string | null;
+    /** Last day the screen's period covers, if it has one. */
+    maxDate?: string | null;
     onsubmit: (payload: {
       hours: number;
       minutes: number;
@@ -18,7 +22,21 @@
     oncancel: () => void;
   };
 
-  let { editing = null, busy, error, onsubmit, oncancel }: Props = $props();
+  let {
+    editing = null,
+    busy,
+    error,
+    minDate = null,
+    maxDate = null,
+    onsubmit,
+    oncancel
+  }: Props = $props();
+
+  // The API refuses future dates and dates outside the screen's period; these
+  // stop both at the widget so the member does not have to be told twice. The
+  // end of the window can be in the past, so the later bound is whichever of
+  // the two comes first.
+  const latest = $derived(maxDate && maxDate < today() ? maxDate : today());
 
   // Seeded from the entry being edited, deliberately once: the parent keys
   // this component on the entry id, so switching targets remounts it rather
@@ -66,7 +84,7 @@
 
 <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="entry-title">
   <form onsubmit={submit}>
-    <h2 id="entry-title">{editing ? 'Edit progress' : 'Add progress'}</h2>
+    <h2 id="entry-title">{editing ? 'Edit Daimoku' : 'Add Daimoku'}</h2>
 
     {#if error}<p class="error" role="alert">{error}</p>{/if}
 
@@ -83,8 +101,7 @@
 
     <div class="field">
       <label for="date">Date</label>
-      <!-- Future dates are refused by the API; max stops them at the widget. -->
-      <input id="date" type="date" bind:value={date} max={today()} />
+      <input id="date" type="date" bind:value={date} min={minDate ?? undefined} max={latest} />
     </div>
 
     <div class="field">
@@ -95,7 +112,7 @@
     <div class="actions">
       <button class="btn" type="button" onclick={oncancel} disabled={busy}>Cancel</button>
       <button class="btn btn-primary" type="submit" disabled={!valid || busy}>
-        {busy ? 'Saving…' : editing ? 'Save' : 'Add'}
+        {busy ? 'Saving…' : editing ? 'Save' : 'Add Daimoku'}
       </button>
     </div>
 

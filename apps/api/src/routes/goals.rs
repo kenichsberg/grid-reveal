@@ -3,6 +3,7 @@
 use axum::extract::{Path, State};
 use axum::routing::get;
 use axum::{Json, Router};
+use chrono::Utc;
 use uuid::Uuid;
 
 use crate::access;
@@ -77,7 +78,7 @@ async fn create(
     Json(body): Json<CreateGoalRequest>,
 ) -> AppResult<Json<GoalSummary>> {
     let screen = access::screen_for_viewer(&state.db, &slug, &auth.user).await?;
-    access::ensure_writable(&screen)?;
+    access::ensure_writable(&screen, Utc::now().date_naive())?;
 
     let text = validate_text(&body.text)?;
 
@@ -142,7 +143,7 @@ async fn destroy(
     if !auth.user.is_admin && !access::is_member(&state.db, screen.id, auth.user.id).await? {
         return Err(AppError::NotFound);
     }
-    access::ensure_writable(&screen)?;
+    access::ensure_writable(&screen, Utc::now().date_naive())?;
 
     if created_by != auth.user.id && !auth.user.is_admin {
         return Err(AppError::Forbidden);
