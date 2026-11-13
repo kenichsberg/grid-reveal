@@ -1,0 +1,42 @@
+# systemd unit for the API.
+#
+# Install to /etc/systemd/system/grid-reveal-api.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now grid-reveal-api
+
+[Unit]
+Description=Grid Reveal API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gridreveal
+Group=gridreveal
+WorkingDirectory=/opt/grid-reveal
+
+# Secrets live here, readable only by the service user. Never in the repo.
+EnvironmentFile=/opt/grid-reveal/.env
+ExecStart=/opt/grid-reveal/grid-reveal-api
+
+Restart=on-failure
+RestartSec=5s
+
+# The service needs nothing outside its own directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/grid-reveal/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grid-reveal-api
+
+[Install]
+WantedBy=multi-user.target

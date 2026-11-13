@@ -1,0 +1,92 @@
+# Local development stack: database, API, and the built frontend.
+#
+#   docker compose up --build
+#   open http://localhost:5173   (sign in as admin / admin-dev-password)
+#
+# This is for running the app on your own machine. Production is a Cloudflare
+# Pages project plus a VM — see DEPLOYMENT.md.
+
+name: grid-reveal
+
+services:
+  db:
+    # Pinned to 17 deliberately. The 18 image moved PGDATA to
+    # /var/lib/postgresql/18/docker and declared VOLUME /var/lib/postgresql,
+    # so a volume mounted at /var/lib/postgresql/data now nests inside the
+    # image's own volume and the server fails to start.
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: grid
+      POSTGRES_PASSWORD: grid
+      POSTGRES_DB: grid_reveal
+    ports:
+      # Deliberately not 5432: a PostgreSQL install on the host would already
+      # hold that port and the container would fail to start. The API reaches
+      # the database over the compose network, so this mapping is purely for
+      # your own psql:
+      #   psql postgres://grid:grid@localhost:55432/grid_reveal
+      - '55432:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U grid -d grid_reveal']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://grid:grid@db:5432/grid_reveal
+      BIND_ADDR: 0.0.0.0:8080
+
+      # Local HTTP, so the cookie cannot carry Secure. Never do this in
+      # production: COOKIE_SECURE=true is required there.
+      COOKIE_SECURE: 'false'
+      # Empty means a host-only cookie for `localhost`. Cookies ignore ports,
+      # so one set by :8080 is still sent from the page on :5173.
+      COOKIE_DOMAIN: ''
+      SESSION_TTL_DAYS: '30'
+
+      # Credentialed CORS cannot use a wildcard. Both the compose frontend and
+      # a `npm run dev` server on the same port are covered.
+      CORS_ALLOWED_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173'
+
+      # Seeded only if no administrator exists yet. Change it after first login.
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin-dev-password
+
+      # No R2_ENDPOINT, so pictures go to local disk — the development
+      # fallback. Set the R2_* variables to exercise object storage instead.
+      LOCAL_STORAGE_DIR: /app/data
+
+      RUST_LOG: grid_reveal_api=debug,tower_http=info
+    ports:
+      - '8080:8080'
+    volumes:
+      - pictures:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked into the bundle: adapter-static has no server to read env at
+        # runtime. Changing this needs a rebuild.
+        PUBLIC_API_BASE_URL: http://localhost:8080
+    ports:
+      - '5173:80'
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  pictures:

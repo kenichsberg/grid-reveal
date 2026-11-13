@@ -1,0 +1,14 @@
+# Secrets never enter an image.
+.env
+.env.*
+!.env.example
+
+.git
+target/
+node_modules/
+apps/web/.svelte-kit/
+apps/web/build/
+openspec/
+deploy/
+*.md
+.DS_Store

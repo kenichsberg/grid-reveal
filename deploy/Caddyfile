@@ -1,0 +1,33 @@
+# TLS termination in front of the axum service.
+#
+# Cloudflare proxies this host, so the certificate here is the origin
+# certificate. Caddy obtains and renews it from Let's Encrypt automatically;
+# set the Cloudflare SSL mode to "Full (strict)" so the hop is verified.
+
+api.example.com {
+    encode zstd gzip
+
+    # Uploads are capped at 10 MB by the API; allow a little multipart overhead.
+    request_body {
+        max_size 12MB
+    }
+
+    reverse_proxy 127.0.0.1:8080 {
+        header_up X-Real-IP {remote_host}
+    }
+
+    header {
+        # The API is never framed and never sniffed.
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/api.log {
+            roll_size 10MB
+            roll_keep 5
+        }
+    }
+}
