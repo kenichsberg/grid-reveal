@@ -146,6 +146,8 @@ mod tests {
             starts_on: starts.map(date),
             ends_on: ends.map(date),
             auto_archive_days: auto,
+            progress_title: None,
+            entry_noun: None,
         }
     }
 

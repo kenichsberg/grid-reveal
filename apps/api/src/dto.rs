@@ -280,6 +280,11 @@ pub struct ScreenDetail {
     #[ts(type = "string | null")]
     pub ends_on: Option<NaiveDate>,
     pub auto_archive_days: Option<i32>,
+    /// Heading above the progress gauge; `null` means the client's default.
+    pub progress_title: Option<String>,
+    /// What one logged session is called here; `null` means the client's
+    /// default. A bare noun — the client builds "Add …" / "Edit …" from it.
+    pub entry_noun: Option<String>,
     /// Whether the caller may administer this screen, so the client can show
     /// or hide controls without a second request.
     pub viewer_is_admin: bool,
@@ -295,6 +300,13 @@ pub struct UpdateScreenRequest {
     /// Absent leaves the window untouched. Present replaces it wholesale, so
     /// clearing one bound means sending the window with that field null.
     pub window: Option<ScreenWindow>,
+    /// Absent leaves the heading alone; an empty string clears it back to the
+    /// client's default. A label is one string, so it can carry "clear"
+    /// itself — the window needed a nested struct only because it is three.
+    pub progress_title: Option<String>,
+    /// Absent leaves it alone; an empty string clears it. See
+    /// [`Self::progress_title`].
+    pub entry_noun: Option<String>,
 }
 
 #[derive(Debug, Deserialize, TS)]

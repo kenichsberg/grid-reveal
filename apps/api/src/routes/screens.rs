@@ -25,6 +25,10 @@ use crate::state::AppState;
 const SLUG_ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyz23456789";
 const SLUG_LEN: usize = 10;
 const MAX_TITLE_LEN: usize = 120;
+/// Mirrors the `screens_progress_title_shape` CHECK.
+const MAX_PROGRESS_TITLE_LEN: usize = 60;
+/// Mirrors the `screens_entry_noun_shape` CHECK.
+const MAX_ENTRY_NOUN_LEN: usize = 40;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -96,6 +100,25 @@ fn validate_title(title: &str) -> AppResult<String> {
         )));
     }
     Ok(trimmed.to_string())
+}
+
+/// Trims a per-screen label and turns a blank one into `None`.
+///
+/// Clearing a label is how an administrator goes back to the built-in wording,
+/// and the only way to say so over a single string field is to send it empty.
+/// Storing that blank instead of NULL would defeat the client's fallback, so
+/// there is exactly one representation of "unset" and it is NULL.
+fn validate_label(field: &str, value: &str, max: usize) -> AppResult<Option<String>> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > max {
+        return Err(AppError::bad_request(format!(
+            "the {field} must be {max} characters or fewer"
+        )));
+    }
+    Ok(Some(trimmed.to_string()))
 }
 
 fn validate_unit(unit_minutes: i32) -> AppResult<()> {
@@ -275,6 +298,8 @@ async fn detail(
         starts_on: screen.starts_on,
         ends_on: screen.ends_on,
         auto_archive_days: screen.auto_archive_days,
+        progress_title: screen.progress_title.clone(),
+        entry_noun: screen.entry_noun.clone(),
         viewer_is_admin: auth.user.is_admin,
     }))
 }
@@ -448,6 +473,27 @@ async fn update(
         .await?;
     }
 
+    // Each label is its own statement for the same reason the title is: an
+    // absent field must leave the stored value exactly as it was, and one
+    // combined UPDATE would have to invent a value for whichever was omitted.
+    if let Some(raw) = &body.progress_title {
+        let label = validate_label("progress heading", raw, MAX_PROGRESS_TITLE_LEN)?;
+        sqlx::query("UPDATE screens SET progress_title = $1 WHERE id = $2")
+            .bind(&label)
+            .bind(screen.id)
+            .execute(&state.db)
+            .await?;
+    }
+
+    if let Some(raw) = &body.entry_noun {
+        let label = validate_label("entry name", raw, MAX_ENTRY_NOUN_LEN)?;
+        sqlx::query("UPDATE screens SET entry_noun = $1 WHERE id = $2")
+            .bind(&label)
+            .bind(screen.id)
+            .execute(&state.db)
+            .await?;
+    }
+
     detail(State(state), AuthUser { user: admin.user, token: admin.token }, Path(slug)).await
 }
 
@@ -596,7 +642,8 @@ async fn remove_member(
 ///
 /// The title, picture and active period are not inherited: a clone is a new
 /// period rather than a copy, so it starts with nothing revealed and whatever
-/// window the administrator gives it.
+/// window the administrator gives it. The wording labels ARE inherited — they
+/// describe the practice the board is for, which a new period does not change.
 async fn clone_screen(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -616,8 +663,8 @@ async fn clone_screen(
     let created = sqlx::query_as::<_, Screen>(
         "INSERT INTO screens
            (slug, title, picture_id, cols, rows, unit_minutes, permutation, created_by,
-            starts_on, ends_on, auto_archive_days)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *",
+            starts_on, ends_on, auto_archive_days, progress_title, entry_noun)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *",
     )
     .bind(&new_slug)
     .bind(&title)
@@ -630,6 +677,8 @@ async fn clone_screen(
     .bind(body.starts_on)
     .bind(body.ends_on)
     .bind(body.auto_archive_days)
+    .bind(&source.progress_title)
+    .bind(&source.entry_noun)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -808,5 +857,27 @@ mod tests {
         assert!(validate_window(None, Some(date("2026-01-20")), Some(15)).is_ok());
         // Nothing to count from, so the term could never fire.
         assert!(validate_window(None, None, Some(15)).is_err());
+    }
+
+    #[test]
+    fn a_blank_label_clears_rather_than_storing_whitespace() {
+        // NULL is the one representation of "unset"; a stored blank would look
+        // like a value and silently defeat the client's fallback wording.
+        assert_eq!(validate_label("entry name", "", 40).unwrap(), None);
+        assert_eq!(validate_label("entry name", "   ", 40).unwrap(), None);
+    }
+
+    #[test]
+    fn a_label_is_trimmed_and_length_checked() {
+        assert_eq!(
+            validate_label("entry name", "  Daimoku  ", 40).unwrap(),
+            Some("Daimoku".to_string())
+        );
+        assert!(validate_label("progress heading", &"x".repeat(60), 60).is_ok());
+        assert!(validate_label("progress heading", &"x".repeat(61), 60).is_err());
+        // Counted in characters, not bytes: a multi-byte label is not shorter
+        // than it looks to the person who typed it.
+        assert!(validate_label("progress heading", &"\u{5531}".repeat(60), 60).is_ok());
+        assert!(validate_label("progress heading", &"\u{5531}".repeat(61), 60).is_err());
     }
 }

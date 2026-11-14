@@ -74,6 +74,14 @@ pub struct Screen {
     /// Days after `ends_on` before the screen archives itself; `None` disables
     /// automatic archiving.
     pub auto_archive_days: Option<i32>,
+    /// Heading above the board's progress gauge. `None` leaves the client to
+    /// its own neutral default, which is how a screen reads until an
+    /// administrator gives it wording of its own.
+    pub progress_title: Option<String>,
+    /// What one logged session is called on this screen, e.g. "Daimoku". The
+    /// client builds "Add …" and "Edit …" from it, so this is a bare noun and
+    /// never a whole button label. `None` falls back to "entry".
+    pub entry_noun: Option<String>,
 }
 
 impl Screen {
@@ -189,6 +197,8 @@ mod tests {
             starts_on: None,
             ends_on: None,
             auto_archive_days: None,
+            progress_title: None,
+            entry_noun: None,
         }
     }
 

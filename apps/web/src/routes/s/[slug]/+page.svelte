@@ -23,20 +23,41 @@
   import GoalsPanel from '$lib/components/GoalsPanel.svelte';
   import MembersPanel from '$lib/components/MembersPanel.svelte';
   import RecordPanel from '$lib/components/RecordPanel.svelte';
-  import { formatHours, formatMinutes, percent } from '$lib/format';
-  import { blockedReason, canEditGoals, canLog, goalMinutes, timelineLabel } from '$lib/screen';
+  import { formatHours, formatMinutes } from '$lib/format';
+  import {
+    blockedReason,
+    canEditGoals,
+    canLog,
+    entryNoun,
+    goalMinutes,
+    periodLabel,
+    progressPercent,
+    progressTitle
+  } from '$lib/screen';
 
   const slug = $derived(page.params.slug!);
 
+  // The members of TABS are internal ids — they key the panel logic and the
+  // lazy-load effects below. TAB_LABELS holds the copy, so renaming what a tab
+  // is CALLED never touches the routing.
   const TABS = ['home', 'record', 'goals', 'members'] as const;
   type Tab = (typeof TABS)[number];
 
   const TAB_LABELS: Record<Tab, string> = {
-    home: 'Home',
+    home: 'Grids',
     record: 'Record',
     goals: 'Goals',
     members: 'Members'
   };
+
+  /**
+   * The gauge's arc: a half circle of radius 84, so the dash that fills it is
+   * π·84 long. Named here beside the radius it is derived from, because the
+   * two live in different languages — this constant and the `A 84 84` in the
+   * path below — and nothing else would catch them drifting apart.
+   */
+  const ARC_RADIUS = 84;
+  const ARC_LENGTH = Math.PI * ARC_RADIUS;
 
   /**
    * The open tab lives in the URL, not in component state.
@@ -66,13 +87,12 @@
 
   let celebrationDismissed = $state(false);
 
-  const pct = $derived(
-    screen ? percent(screen.revealed_count, screen.total_tiles) : 0
-  );
+  const pct = $derived(screen ? progressPercent(screen) : 0);
 
   const writable = $derived(screen !== null && canLog(screen));
   const goalsWritable = $derived(screen !== null && canEditGoals(screen));
-  const timeline = $derived(screen ? timelineLabel(screen) : null);
+  const period = $derived(screen ? periodLabel(screen) : null);
+  const noun = $derived(screen ? entryNoun(screen) : 'entry');
   const blocked = $derived(screen ? blockedReason(screen) : null);
 
   // The celebration shows for everyone on every visit, until dismissed for
@@ -264,8 +284,12 @@
     aria-hidden="true"
   >
     {#if item === 'home'}
-      <path d="M3 10.5 12 3l9 7.5" />
-      <path d="M5.5 9.5V20h13V9.5" />
+      <!-- A grid of tiles, one of them revealed: the favicon's idea, squared
+           up. The favicon's own off-grid arrangement turns to mud at 22px. -->
+      <rect x="3.6" y="3.6" width="7.4" height="7.4" rx="1.6" fill="currentColor" />
+      <rect x="13" y="3.6" width="7.4" height="7.4" rx="1.6" />
+      <rect x="3.6" y="13" width="7.4" height="7.4" rx="1.6" />
+      <rect x="13" y="13" width="7.4" height="7.4" rx="1.6" />
     {:else if item === 'record'}
       <circle cx="12" cy="12" r="8.5" />
       <path d="M12 7v5.2l3.2 2" />
@@ -283,7 +307,7 @@
 {/snippet}
 
 {#snippet addButton()}
-  <button class="cta" onclick={() => (showEntryForm = true)}>Add Daimoku</button>
+  <button class="cta" onclick={() => (showEntryForm = true)}>Add {noun}</button>
 {/snippet}
 
 {#if loadError}
@@ -305,26 +329,34 @@
       </div>
 
       <div class="progress">
-        <p class="progress-title">Daimoku Progress</p>
+        <p class="progress-title">{progressTitle(screen)}</p>
+        {#if period}<p class="period">{period}</p>{/if}
 
-        <div class="stats">
-          <p class="stat">
-            <span class="label">current</span>
-            <strong>{formatHours(screen.total_minutes)}<span class="unit">h</span></strong>
-          </p>
-          <p class="stat">
-            <span class="label">goal</span>
-            <strong>{formatHours(goalMinutes(screen))}<span class="unit">h</span></strong>
-          </p>
-          <p class="stat pct"><strong>{pct}%</strong></p>
+        <!-- The arc is decoration: every number it encodes is also spelled out
+             as text below, so a screen reader gets the readout either way. -->
+        <div class="gauge">
+          <svg class="arc" viewBox="0 0 200 108" aria-hidden="true">
+            <path class="arc-track" d="M 16 100 A {ARC_RADIUS} {ARC_RADIUS} 0 0 1 184 100" />
+            <path
+              class="arc-fill"
+              d="M 16 100 A {ARC_RADIUS} {ARC_RADIUS} 0 0 1 184 100"
+              style={`stroke-dasharray:${ARC_LENGTH};stroke-dashoffset:${ARC_LENGTH * (1 - pct / 100)}`}
+            />
+          </svg>
+          <p class="gauge-pct"><strong>{pct}%</strong></p>
         </div>
 
-        <div class="meter" aria-hidden="true">
-          <div class="meter-fill" style={`width:${pct}%`}></div>
+        <div class="ends">
+          <p class="stat">
+            <strong>{formatHours(screen.total_minutes)}<span class="unit">h</span></strong>
+            <span class="label">current</span>
+          </p>
+          <p class="stat goal">
+            <strong>{formatHours(goalMinutes(screen))}<span class="unit">h</span></strong>
+            <span class="label">goal</span>
+          </p>
         </div>
       </div>
-
-      {#if timeline}<p class="timeline">{timeline}</p>{/if}
 
 
       <!-- Rendered from one snippet in two slots; CSS hides whichever slot the
@@ -405,6 +437,7 @@
     {#key editing?.id ?? 'new'}
       <EntryForm
         {editing}
+        {noun}
         busy={formBusy}
         error={formError}
         minDate={screen.starts_on}
@@ -449,6 +482,17 @@
     position: relative;
     min-width: 0;
     min-height: 0;
+  }
+
+  /* Narrow: the picture sits against the header rather than floating in the
+     middle of its track. A landscape picture in a tall stage letterboxes, and
+     centring that slack puts a black gap directly under the gauge, which
+     reads as a layout mistake. Pushed to the bottom instead, the slack is
+     continuous with the tab bar and disappears. Above 960px the stage is a
+     column beside the rail and centring is right again, so this is scoped
+     below the shell's one breakpoint. */
+  @media (max-width: 959px) {
+    .stage { --board-top: 0px; }
   }
 
   /* ——— band ——— */
@@ -514,59 +558,99 @@
     min-width: 0;
   }
 
+  /* The heading and the period centre over the gauge, which is itself centred
+     — three stacked things on one axis rather than a left-aligned label above
+     a centred dial. */
   .progress-title {
     margin: 0;
     font-size: 1.2rem;
     font-weight: 600;
     letter-spacing: -0.01em;
+    text-align: center;
   }
 
-  .stats {
+  .period {
+    margin: -0.15rem 0 0;
+    color: var(--board-ink-dim);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  /* The gauge is capped rather than fluid: the band is a content-sized track,
+     so an arc that grew with the viewport would take its height out of the
+     board. 13rem is about as small as the percentage in its mouth stays
+     legible. */
+  .gauge {
+    position: relative;
+    width: min(13rem, 72%);
+    margin: 0.1rem auto 0;
+  }
+
+  .arc { display: block; width: 100%; height: auto; }
+
+  .arc-track,
+  .arc-fill {
+    fill: none;
+    stroke-width: 16;
+    stroke-linecap: round;
+  }
+
+  .arc-track { stroke: rgb(255 255 255 / 0.18); }
+
+  .arc-fill {
+    stroke: var(--accent);
+    /* The dash lengths are set inline from ARC_LENGTH; only the easing lives
+       here. The global prefers-reduced-motion rule clamps it. */
+    transition: stroke-dashoffset 400ms ease;
+  }
+
+  /* Inside the arc's mouth, not below it: the arc bottoms out at y=100 of 108,
+     so the baseline sits just above the ends of the stroke. */
+  .gauge-pct {
+    position: absolute;
+    left: 50%;
+    bottom: 0.1rem;
+    transform: translateX(-50%);
+    margin: 0;
+    line-height: 1;
+  }
+
+  .gauge-pct strong { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.02em; }
+
+  /* Tied to the gauge's own width rather than the band's, so the two figures
+     sit just outside the ends of the arc instead of drifting to the edges of
+     a wide band. A shade wider than .gauge, which is what tucks them under
+     the stroke's outer edge. */
+  .ends {
     display: flex;
-    align-items: baseline;
-    gap: 1.4rem;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    width: min(15rem, 84%);
     min-width: 0;
+    margin: -0.2rem auto 0;
   }
 
   .stat {
     display: flex;
-    align-items: baseline;
-    gap: 0.4rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.05rem;
     margin: 0;
     min-width: 0;
   }
 
+  .stat.goal { align-items: flex-end; }
+
   .stat .label {
     color: var(--board-ink-dim);
-    font-size: 0.9rem;
-    letter-spacing: 0.02em;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
     text-transform: lowercase;
   }
 
-  .stat strong { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
-  .stat .unit { font-size: 1rem; font-weight: 500; opacity: 0.85; }
-  .pct { margin-left: auto; }
-  .pct strong { font-size: 1.35rem; font-weight: 600; }
-
-  .meter {
-    height: 8px;
-    border-radius: 999px;
-    background: rgb(255 255 255 / 0.18);
-    overflow: hidden;
-  }
-
-  .meter-fill {
-    height: 100%;
-    border-radius: 999px;
-    background: var(--accent);
-    transition: width 400ms ease;
-  }
-
-  .timeline {
-    margin: 0;
-    color: var(--board-ink-dim);
-    font-size: 0.75rem;
-  }
+  .stat strong { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
+  .stat .unit { font-size: 0.8rem; font-weight: 500; opacity: 0.85; }
 
   .rail-cta { display: none; }
 
@@ -704,8 +788,9 @@
     }
     .chip { order: 1; margin-left: auto; }
 
-    .stats { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
-    .pct { margin-left: 0; }
+    /* The rail is --rail-w (15rem) wide, so the gauge may use all of it. */
+    .gauge,
+    .ends { width: 100%; }
 
     /* With a cursor there is no thumb to reach, so the primary action belongs
        at the top of the rail rather than floating over the artwork. */

@@ -6,4 +6,15 @@ export type UpdateScreenRequest = { title: string | null, cols: number | null, r
  * Absent leaves the window untouched. Present replaces it wholesale, so
  * clearing one bound means sending the window with that field null.
  */
-window: ScreenWindow | null, };
+window: ScreenWindow | null, 
+/**
+ * Absent leaves the heading alone; an empty string clears it back to the
+ * client's default. A label is one string, so it can carry "clear"
+ * itself — the window needed a nested struct only because it is three.
+ */
+progress_title: string | null, 
+/**
+ * Absent leaves it alone; an empty string clears it. See
+ * [`Self::progress_title`].
+ */
+entry_noun: string | null, };

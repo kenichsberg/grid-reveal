@@ -24,6 +24,12 @@
   let title = $state('');
   let savingTitle = $state(false);
 
+  // Wording. Empty means "use the app's default", which is also what the API
+  // stores for a cleared label — so the inputs need no third, "unset" state.
+  let progressTitle = $state('');
+  let entryNoun = $state('');
+  let savingWording = $state(false);
+
   // Geometry
   let cols = $state(0);
   let rows = $state(0);
@@ -75,6 +81,8 @@
       const detail = await api.getScreen(slug);
       screen = detail;
       title = detail.title;
+      progressTitle = detail.progress_title ?? '';
+      entryNoun = detail.entry_noun ?? '';
       cols = detail.cols;
       rows = detail.rows;
       unitMinutes = detail.unit_minutes;
@@ -122,13 +130,40 @@
         rows: null,
         unit_minutes: null,
         // Absent leaves the period untouched.
-        window: null
+        window: null,
+        progress_title: null,
+        entry_noun: null
       });
       report('Title saved.');
     } catch (e) {
       fail(e, 'Could not save the title.');
     } finally {
       savingTitle = false;
+    }
+  }
+
+  async function saveWording(event: SubmitEvent) {
+    event.preventDefault();
+    savingWording = true;
+    try {
+      // An emptied field is sent as '' rather than null: null would mean
+      // "leave it as it is", and there would be no way back to the default.
+      screen = await api.updateScreen(slug, {
+        title: null,
+        cols: null,
+        rows: null,
+        unit_minutes: null,
+        window: null,
+        progress_title: progressTitle.trim(),
+        entry_noun: entryNoun.trim()
+      });
+      progressTitle = screen.progress_title ?? '';
+      entryNoun = screen.entry_noun ?? '';
+      report('Wording saved.');
+    } catch (e) {
+      fail(e, 'Could not save the wording.');
+    } finally {
+      savingWording = false;
     }
   }
 
@@ -146,7 +181,9 @@
         cols,
         rows,
         unit_minutes: unitMinutes,
-        window: null
+        window: null,
+        progress_title: null,
+        entry_noun: null
       });
       report('Grid updated. Total logged time is unchanged.');
     } catch (e) {
@@ -222,7 +259,9 @@
           starts_on: startsOn || null,
           ends_on: endsOn || null,
           auto_archive_days: endsOn ? autoArchiveDays : null
-        }
+        },
+        progress_title: null,
+        entry_noun: null
       });
       report('Period saved.');
     } catch (e) {
@@ -304,6 +343,45 @@
         </div>
         <button class="btn btn-sm btn-primary" type="submit" disabled={savingTitle}>
           {savingTitle ? 'Saving…' : 'Save title'}
+        </button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Wording</h2>
+      <p class="muted small">
+        What this board calls its progress and the sessions logged against it.
+        Leave a field empty to use the default.
+      </p>
+
+      <form onsubmit={saveWording}>
+        <div class="field">
+          <label for="progress-title">Progress heading</label>
+          <input
+            id="progress-title"
+            type="text"
+            bind:value={progressTitle}
+            maxlength="60"
+            placeholder="Progress"
+          />
+        </div>
+
+        <div class="field">
+          <label for="entry-noun">Name for one entry</label>
+          <input
+            id="entry-noun"
+            type="text"
+            bind:value={entryNoun}
+            maxlength="40"
+            placeholder="entry"
+          />
+          <p class="muted small">
+            Used as written, so “Daimoku” gives “Add Daimoku” and “Edit Daimoku”.
+          </p>
+        </div>
+
+        <button class="btn btn-sm btn-primary" type="submit" disabled={savingWording}>
+          {savingWording ? 'Saving…' : 'Save wording'}
         </button>
       </form>
     </section>

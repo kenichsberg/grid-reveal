@@ -22,6 +22,15 @@ archived: boolean,
  */
 phase: Phase, starts_on: string | null, ends_on: string | null, auto_archive_days: number | null, 
 /**
+ * Heading above the progress gauge; `null` means the client's default.
+ */
+progress_title: string | null, 
+/**
+ * What one logged session is called here; `null` means the client's
+ * default. A bare noun — the client builds "Add …" / "Edit …" from it.
+ */
+entry_noun: string | null, 
+/**
  * Whether the caller may administer this screen, so the client can show
  * or hide controls without a second request.
  */

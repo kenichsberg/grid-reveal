@@ -110,12 +110,12 @@
           type="text"
           bind:value={text}
           maxlength={MAX_LEN}
-          placeholder="Add my goal…"
+          placeholder="Share my goal…"
           aria-label="New goal"
           enterkeyhint="done"
         />
         <button class="btn btn-sm btn-primary" type="submit" disabled={busy || !text.trim()}>
-          Add
+          Share
         </button>
       </form>
       {#if text.length > MAX_LEN - 40}

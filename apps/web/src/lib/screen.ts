@@ -8,7 +8,17 @@
  * button that lies about whether it works.
  */
 import type { Phase, ScreenDetail } from '$lib/api/types';
-import { formatDayMonth } from '$lib/format';
+import { formatDayMonth, percent } from '$lib/format';
+
+/**
+ * The wording a screen falls back to when an administrator has set none.
+ *
+ * Neutral on purpose: the application is not about one practice, and the
+ * particular word a group uses belongs in that screen's settings rather than
+ * in this file.
+ */
+const DEFAULT_PROGRESS_TITLE = 'Progress';
+const DEFAULT_ENTRY_NOUN = 'entry';
 
 /** The fields these helpers read; keeps them usable from the list page too. */
 type Lifecycle = {
@@ -44,6 +54,39 @@ export function goalMinutes(screen: Pick<ScreenDetail, 'total_tiles' | 'unit_min
 }
 
 /**
+ * Progress towards the hour goal, as a whole percentage.
+ *
+ * Measured in logged time rather than in revealed tiles, so that the gauge,
+ * the percentage in its mouth and the two hour figures beneath it are all the
+ * same fraction. A tile-based figure would disagree with the hours printed
+ * beside it whenever a tile is part-paid for, and two numbers that contradict
+ * each other in one glance are worse than either alone.
+ *
+ * Clamped at 100: logged time may exceed the goal, but a gauge cannot.
+ */
+export function progressPercent(
+  screen: Pick<ScreenDetail, 'total_minutes' | 'total_tiles' | 'unit_minutes'>
+): number {
+  return Math.min(100, percent(screen.total_minutes, goalMinutes(screen)));
+}
+
+/** The heading above the progress gauge, or the neutral default. */
+export function progressTitle(screen: Pick<ScreenDetail, 'progress_title'>): string {
+  return screen.progress_title?.trim() || DEFAULT_PROGRESS_TITLE;
+}
+
+/**
+ * What one logged session is called on this screen.
+ *
+ * A bare noun, because the call sites build "Add …" and "Edit …" from it. The
+ * default is lowercase so that "Add entry" reads as a sentence, while a
+ * configured proper noun ("Daimoku") keeps its own capital.
+ */
+export function entryNoun(screen: Pick<ScreenDetail, 'entry_noun'>): string {
+  return screen.entry_noun?.trim() || DEFAULT_ENTRY_NOUN;
+}
+
+/**
  * A short phrase for the screen's period, or `null` when there is nothing to
  * say — an active screen with no window configured is simply open.
  */
@@ -58,6 +101,27 @@ export function timelineLabel(screen: Lifecycle): string | null {
     case 'active':
       return screen.ends_on ? `Ends ${formatDayMonth(screen.ends_on)}` : null;
   }
+}
+
+/**
+ * The screen's period as a span, for the line under the board's heading.
+ *
+ * Dates rather than {@link timelineLabel}'s phrase, because this sits as a
+ * subtitle and is read as "what stretch of time is this board about" — not as
+ * "what happens next". `null` when the screen has no window at all, in which
+ * case the line is not rendered rather than rendered empty.
+ */
+export function periodLabel(screen: Lifecycle): string | null {
+  const from = screen.starts_on ? formatDayMonth(screen.starts_on) : null;
+  const to = screen.ends_on ? formatDayMonth(screen.ends_on) : null;
+
+  const span =
+    from && to ? `${from} – ${to}` : from ? `From ${from}` : to ? `Until ${to}` : null;
+
+  // An archived screen says so even when it never had a window: that is the
+  // one phase a bare pair of dates would not convey.
+  if (screen.phase === 'archived') return span ? `${span} · Archived` : 'Archived';
+  return span;
 }
 
 /**

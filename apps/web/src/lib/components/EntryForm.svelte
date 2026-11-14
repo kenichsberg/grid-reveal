@@ -7,6 +7,12 @@
   type Props = {
     /** When set, the form edits that entry instead of creating a new one. */
     editing?: EntrySummary | null;
+    /**
+     * What one logged session is called on this screen, as a bare noun. The
+     * headings and the submit button are built from it, so "Daimoku" gives
+     * "Add Daimoku" / "Edit Daimoku" and the default gives "Add entry".
+     */
+    noun?: string;
     busy: boolean;
     error: string;
     /** First day the screen's period covers, if it has one. */
@@ -24,6 +30,7 @@
 
   let {
     editing = null,
+    noun = 'entry',
     busy,
     error,
     minDate = null,
@@ -84,7 +91,7 @@
 
 <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="entry-title">
   <form onsubmit={submit}>
-    <h2 id="entry-title">{editing ? 'Edit Daimoku' : 'Add Daimoku'}</h2>
+    <h2 id="entry-title">{editing ? `Edit ${noun}` : `Add ${noun}`}</h2>
 
     {#if error}<p class="error" role="alert">{error}</p>{/if}
 
@@ -112,7 +119,7 @@
     <div class="actions">
       <button class="btn" type="button" onclick={oncancel} disabled={busy}>Cancel</button>
       <button class="btn btn-primary" type="submit" disabled={!valid || busy}>
-        {busy ? 'Saving…' : editing ? 'Save' : 'Add Daimoku'}
+        {busy ? 'Saving…' : editing ? 'Save' : `Add ${noun}`}
       </button>
     </div>
 

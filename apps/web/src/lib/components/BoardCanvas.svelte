@@ -578,7 +578,7 @@
 <div class="board" bind:this={container}>
   <div
     class="stage"
-    style={`left:${box.left}px; top:${box.top}px; width:${box.width}px; height:${box.height}px;`}
+    style={`left:${box.left}px; --letterbox-top:${box.top}px; width:${box.width}px; height:${box.height}px;`}
   >
     <img {src} alt="" draggable="false" />
     <canvas
@@ -597,7 +597,19 @@
     background: #000;
   }
 
-  .stage { position: absolute; }
+  /**
+   * Vertically centred in its container by default, which is what a picture
+   * floating in a dark surround wants.
+   *
+   * The host may override that by setting `--board-top` — the narrow board
+   * layout pins the picture to the top, so the slack a letterboxed landscape
+   * picture leaves collects under it rather than opening a black gap between
+   * the header and the picture.
+   */
+  .stage {
+    position: absolute;
+    top: var(--board-top, var(--letterbox-top));
+  }
 
   img {
     position: absolute;

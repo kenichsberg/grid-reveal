@@ -75,6 +75,8 @@ fn screen_detail_never_discloses_unrevealed_tiles() {
         starts_on: None,
         ends_on: None,
         auto_archive_days: None,
+        progress_title: None,
+        entry_noun: None,
         viewer_is_admin: false,
     };
 
@@ -195,6 +197,8 @@ fn an_ended_screen_still_serializes_its_revealed_prefix() {
         starts_on: Some("2026-01-01".parse().unwrap()),
         ends_on: Some("2026-01-31".parse().unwrap()),
         auto_archive_days: Some(15),
+        progress_title: Some("Daimoku Progress".into()),
+        entry_noun: Some("Daimoku".into()),
         viewer_is_admin: false,
     };
 
