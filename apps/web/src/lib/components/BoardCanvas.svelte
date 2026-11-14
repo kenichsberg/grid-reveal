@@ -53,8 +53,8 @@
   const MAX_TOTAL_STAGGER = 1400;
 
   /** Fragment lifetime, in ms, before and after jitter. */
-  const FRAGMENT_LIFE = 560;
-  const FRAGMENT_LIFE_JITTER = 320;
+  const FRAGMENT_LIFE = 1000;
+  const FRAGMENT_LIFE_JITTER = 500;
   /**
    * Fragments per axis, so a tile breaks into GRID x GRID pieces.
    *
@@ -69,7 +69,25 @@
    * of pieces. Past this the pieces per tile drop rather than the frame rate.
    */
   const MAX_FRAGMENTS = 2600;
-  /** Below this cell size in px, fragments would be sub-pixel confetti. */
+  /**
+   * The smallest a drawn chip may be, in px.
+   *
+   * Fragment size is otherwise a cell divided by the fragment grid, which on a
+   * dense board means a two-pixel crumb nobody can see. Below this floor the
+   * pieces are drawn larger than their lattice spacing: they overlap at the
+   * moment of the break, which reads as a solid brick coming apart, and
+   * separate within a few frames.
+   */
+  const MIN_PIECE_PX = 5.5;
+  /**
+   * The smallest cell size, in px, that physics is scaled from.
+   *
+   * Speed, lift and gravity are all multiples of a cell, so on a dense board
+   * the debris would travel a handful of pixels and look like it was dropped
+   * rather than thrown. Small cells borrow a larger cell's energy.
+   */
+  const MIN_BURST_PX = 30;
+  /** Below this cell size in px, the lattice itself stops being meaningful. */
   const MIN_FRAGMENT_PX = 1.6;
 
   /** Outward speed, as multiples of a cell per second. */
@@ -82,7 +100,7 @@
   /** Radians per second a fragment tumbles, at most. */
   const MAX_SPIN = 7;
   /** Rotating each piece costs a transform; below this it is not visible. */
-  const SPIN_THRESHOLD_PX = 5;
+  const SPIN_THRESHOLD_PX = 6.5;
 
   type Fragment = {
     /** Centre, in canvas pixels. */
@@ -397,9 +415,15 @@
   /** Breaks one tile into fragments and throws them outward. */
   function shatter(index: number, cellWidth: number, cellHeight: number) {
     const grid = fragmentGrid;
+    // Lattice spacing: where the pieces start. Separate from their drawn size,
+    // which has a floor, so a dense board breaks into chips that can be seen.
     const pieceWidth = cellWidth / grid;
     const pieceHeight = cellHeight / grid;
-    const cell = Math.max(cellWidth, cellHeight);
+    const drawWidth = Math.max(pieceWidth, MIN_PIECE_PX);
+    const drawHeight = Math.max(pieceHeight, MIN_PIECE_PX);
+    // Physics is scaled from a cell, floored so small cells still throw their
+    // debris a visible distance.
+    const cell = Math.max(Math.max(cellWidth, cellHeight), MIN_BURST_PX);
 
     const originX = (index % cols) * cellWidth;
     const originY = Math.floor(index / cols) * cellHeight;
@@ -435,8 +459,8 @@
           x,
           y,
           // A touch of size jitter, so the break looks uneven.
-          w: pieceWidth * (0.7 + Math.random() * 0.45),
-          h: pieceHeight * (0.7 + Math.random() * 0.45),
+          w: drawWidth * (0.7 + Math.random() * 0.45),
+          h: drawHeight * (0.7 + Math.random() * 0.45),
           vx: dx * speed + (Math.random() - 0.5) * cell,
           vy: dy * speed - cell * LIFT * (0.6 + Math.random() * 0.8),
           gravity: cell * GRAVITY,
