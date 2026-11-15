@@ -1,0 +1,90 @@
+# Builds the API binary for the deployment VM and attaches it to a release.
+#
+# The VM is an Oracle Always Free AMD micro: 1 core, 1 GB RAM. `cargo build
+# --release` over this dependency set — with codegen-units = 1 and thin LTO,
+# and libwebp compiled from vendored C — exhausts that memory during codegen
+# and linking, so the binary is built here and copied over rather than built
+# in place.
+#
+# Install on the VM by following DEPLOYMENT.md section 4, substituting a
+# download of the release asset for the `cargo build` step.
+
+name: Release API binary
+
+on:
+  push:
+    tags: ['v*']
+  # So a build can be forced without inventing a tag. A dispatched run produces
+  # an artifact but no release, since there is no tag to attach one to.
+  workflow_dispatch:
+
+permissions:
+  # Required to create the release and upload assets to it.
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # Debian 11, so the binary links against glibc 2.31 — older than the VM's
+    # 2.39, which is the direction that works: a binary runs on any glibc at
+    # least as new as the one it was built against, never older. Building on
+    # the runner's own Ubuntu would pin it to that runner's glibc and strand
+    # the binary on anything less current.
+    #
+    # The tag pins Rust to the `rust-version` in apps/api/Cargo.toml, so CI
+    # cannot quietly build with a newer compiler than the project claims to
+    # support. The non-slim image is buildpack-deps based, so gcc (for
+    # libwebp) and git (for checkout) are already present.
+    container: rust:1.82-bullseye
+
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # A cold build of axum + sqlx + tokio + image + rust-s3 is several
+      # minutes; a rerun should not pay for it twice.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/api
+
+      # No database needed: the suite is unit and serialization tests, and the
+      # code uses sqlx's runtime query API rather than the `query!` macro, so
+      # neither DATABASE_URL nor SQLX_OFFLINE comes into it.
+      - name: Test
+        run: cargo test --locked
+
+      # --locked against the committed Cargo.lock: a release binary should be
+      # reproducible from the tag, not from whatever resolved that morning.
+      - name: Build
+        run: cargo build --release --locked
+
+      # So the copy that lands on the VM can be verified rather than trusted.
+      # The release profile already sets strip = true.
+      - name: Checksum
+        working-directory: apps/api/target/release
+        run: sha256sum grid-reveal-api | tee grid-reveal-api.sha256
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/api/target/release/grid-reveal-api
+            apps/api/target/release/grid-reveal-api.sha256
+
+      # A dispatched run has no tag to attach to, so the binary is kept as a
+      # workflow artifact instead — which is also how to exercise this file
+      # without spending a version number on it.
+      - name: Upload artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: grid-reveal-api
+          path: |
+            apps/api/target/release/grid-reveal-api
+            apps/api/target/release/grid-reveal-api.sha256
+          if-no-files-found: error

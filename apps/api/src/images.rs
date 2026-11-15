@@ -17,7 +17,15 @@ pub const MAX_DIMENSION: u32 = 2560;
 const WEBP_QUALITY: f32 = 82.0;
 
 /// Ceiling on decoded pixel data, independent of the compressed size.
-const MAX_DECODED_BYTES: u64 = 512 * 1024 * 1024;
+///
+/// Sized against [`MAX_UPLOAD_BYTES`] and the host rather than picked round.
+/// 128 MB is 32 megapixels as RGBA, and a 10 MB JPEG decodes to roughly 28 at
+/// ordinary quality — so anything that clears the byte cap still decodes, while
+/// a file that compresses tiny and expands enormously is refused before it
+/// allocates. The service runs on a 1 GB instance alongside Caddy, where a
+/// spike several times this would take the machine down rather than fail the
+/// one upload that caused it.
+const MAX_DECODED_BYTES: u64 = 128 * 1024 * 1024;
 
 pub struct ProcessedImage {
     pub bytes: Vec<u8>,
