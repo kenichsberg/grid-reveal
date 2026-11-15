@@ -1,0 +1,14 @@
+# Cloudflare Pages SPA routing.
+#
+# The app is adapter-static with fallback: 'index.html' (svelte.config.js), so
+# routing happens entirely in the browser and no path but / exists as a file.
+# This serves the shell for every path, with 200 rather than a redirect, and
+# lets the client router read the URL it was actually asked for.
+#
+# It matters more here than in most single-page apps: a board lives at
+# /s/<slug>, and that link is the only way a member reaches one. Without this
+# a shared link would 404 while the home page worked, which is exactly the
+# kind of break that survives testing.
+#
+# Anything in static/ is copied to the root of the build output.
+/*  /index.html  200
