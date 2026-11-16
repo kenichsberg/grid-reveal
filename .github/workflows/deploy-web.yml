@@ -1,0 +1,126 @@
+# Builds the SPA and hands the finished files to Cloudflare Pages via Wrangler.
+#
+# Pages' own Git integration is deliberately not used. It would put the build
+# definition in a dashboard that nothing in this tree records, require
+# write-scoped OAuth access to the repository, and start from a SvelteKit preset
+# that assumes `adapter-cloudflare` — while this app is `adapter-static` and
+# emits plain files into `build`. Building here keeps all of that in version
+# control, and Cloudflare only ever receives the output.
+#
+# One-time setup, none of it in a browser:
+#
+#   gh secret   set CLOUDFLARE_API_TOKEN     # Account > Cloudflare Pages > Edit
+#   gh secret   set CLOUDFLARE_ACCOUNT_ID    # `wrangler whoami`, or the dashboard URL
+#   gh variable set PUBLIC_API_BASE_URL      # https://api.<domain>
+#
+# PUBLIC_API_BASE_URL is a variable rather than a secret on purpose: it is
+# compiled into the JavaScript bundle and served to every visitor, so filing it
+# as a secret would only disguise where it already is.
+
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/deploy-web.yml'
+  # So a deploy can be forced after changing PUBLIC_API_BASE_URL, which is a
+  # rebuild rather than a code change and so moves no file this workflow watches.
+  workflow_dispatch:
+
+# One deploy at a time, and never cancelled part-way: an interrupted upload
+# wastes the run, and a superseded deploy is replaced by the next one anyway.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Also the *.pages.dev subdomain, which is global — if creation fails as taken,
+  # change this and nothing else.
+  PROJECT_NAME: grid-reveal
+  # Pinned rather than floated: this is the one tool here that writes to
+  # production, and a new release should be adopted deliberately.
+  WRANGLER_VERSION: '4.163.0'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          # The lockfile is in apps/web; there is no workspace root.
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build
+        working-directory: apps/web
+        env:
+          PUBLIC_API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL }}
+        run: |
+          # Resolved at build time by `$env/static/public` in
+          # src/lib/api/client.ts, so the API host is compiled into the bundle.
+          # SvelteKit would fail on its own if it were missing, but several
+          # modules deep and without naming the repository variable to fix.
+          test -n "$PUBLIC_API_BASE_URL" || {
+            echo "PUBLIC_API_BASE_URL is not set; add it with: gh variable set PUBLIC_API_BASE_URL" >&2
+            exit 1
+          }
+          npm run build
+
+      - name: Ensure the Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Asked directly rather than read out of `wrangler pages project list`,
+          # whose table layout is not a contract, and branched on rather than
+          # created with `|| true`, which would swallow a bad token and report it
+          # later as a confusing deploy failure.
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT_NAME")
+          case "$status" in
+            200)
+              echo "Project $PROJECT_NAME already exists."
+              ;;
+            404)
+              npx --yes "wrangler@$WRANGLER_VERSION" pages project create "$PROJECT_NAME" \
+                --production-branch=main
+              ;;
+            *)
+              echo "Cloudflare answered HTTP $status. A 401 or 403 means CLOUDFLARE_API_TOKEN" >&2
+              echo "lacks Account > Cloudflare Pages > Edit, or CLOUDFLARE_ACCOUNT_ID is wrong." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Deploy
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # `build` carries static/_redirects as build/_redirects, which is what
+          # makes a deep link like /s/<slug> serve the shell instead of 404ing.
+          #
+          # --branch decides the deployment's kind: `main` matches the production
+          # branch set above and so publishes to the live domain. The commit
+          # details are passed explicitly because Wrangler is deploying a
+          # directory, not a repository, and would otherwise record nothing about
+          # where these files came from.
+          npx --yes "wrangler@$WRANGLER_VERSION" pages deploy build \
+            --project-name="$PROJECT_NAME" \
+            --branch="${{ github.ref_name }}" \
+            --commit-hash="${{ github.sha }}"

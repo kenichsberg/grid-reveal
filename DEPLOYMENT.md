@@ -112,14 +112,48 @@ sudo netfilter-persistent save
 
 ## 6. Cloudflare Pages
 
-Create a Pages project from the repository:
+The frontend is built and deployed by `.github/workflows/deploy-web.yml`, not by
+Cloudflare's Git integration: the build definition belongs in this repository
+rather than in a dashboard, and Cloudflare never needs access to the source.
+The project itself is created by the same workflow on its first run, so there is
+nothing to click.
 
-- **Build command:** `npm run build`
-- **Build output directory:** `build`
-- **Root directory:** `apps/web`
-- **Environment variable:** `PUBLIC_API_BASE_URL=https://api.<domain>`
+Give it its credentials once, from a terminal:
 
-The SPA falls back to `index.html`, so deep links like `/s/k3m9xq2p` resolve.
+```bash
+gh secret   set CLOUDFLARE_API_TOKEN     # Account > Cloudflare Pages > Edit
+gh secret   set CLOUDFLARE_ACCOUNT_ID    # `wrangler whoami`, or the dashboard URL
+gh variable set PUBLIC_API_BASE_URL      # https://api.<domain>
+```
+
+The token is made at **My Profile > API Tokens > Create Token > Custom token**
+with the single permission *Account - Cloudflare Pages - Edit*, scoped to this
+account.
+
+Then run the workflow (`gh workflow run deploy-web.yml`, or push to `main`).
+Every later push that touches `apps/web/` redeploys on its own.
+
+Two consequences worth knowing:
+
+- `PUBLIC_API_BASE_URL` is read at build time by `$env/static/public`, so it is
+  compiled into the bundle. Changing the API host means re-running the workflow,
+  not restarting anything.
+- `apps/web/static/_redirects` ships as `build/_redirects` and serves the shell
+  for every path, so deep links like `/s/k3m9xq2p` resolve instead of 404ing.
+
+Add the custom domain once the first deployment is live:
+
+```bash
+curl -X POST \
+  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/grid-reveal/domains" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"name":"app.<domain>"}'
+```
+
+Cloudflare creates the DNS record itself when the zone is in the same account.
+If this is refused for permissions, either add *Zone - DNS - Edit* for that zone
+to the token or add the `CNAME` to `grid-reveal.pages.dev` by hand.
 
 ## 7. Configure CORS and cookies
 
