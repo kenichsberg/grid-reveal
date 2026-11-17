@@ -6,7 +6,7 @@
 # and linking, so the binary is built here and copied over rather than built
 # in place.
 #
-# Install on the VM by following DEPLOYMENT.md section 4, substituting a
+# Install on the VM by following DEPLOYMENT.md section 5, substituting a
 # download of the release asset for the `cargo build` step.
 
 name: Release API binary

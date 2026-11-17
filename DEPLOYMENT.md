@@ -37,7 +37,43 @@ private VCN address, and nothing outside the subnet should be able to name it.
 Set the Cloudflare SSL mode to **Full (strict)** so the hop from Cloudflare to
 your origin is verified, not just encrypted.
 
-## 2. Database
+## 2. Oracle networking
+
+Both instances live in **one VCN, in the same public subnet**, so they can
+reach each other over private addresses at no cost and with no hop through the
+internet. Create it with the **VCN with Internet Connectivity** wizard, which
+produces the subnet, internet gateway and route table together; launching the
+instances into it is the only networking choice that matters.
+
+The database VM keeps a public address so it can fetch packages and updates,
+but Postgres never listens on it — `listen_addresses` binds the private address
+only (section 3). A public address on the instance and a service exposed to the
+internet are different things, and conflating them is what makes people reach
+for a NAT gateway they do not need.
+
+**Reserve the API VM's public IP.** Oracle hands out ephemeral addresses by
+default and they change when an instance is stopped and started, which would
+silently break the `api` DNS record. Reserving it is free and takes one click:
+*Instance > Attached VNICs > ... > Edit > Reserved public IP*.
+
+Security list ingress rules for the subnet:
+
+| Port | Source | Why |
+|------|--------|-----|
+| 22   | your own address, not `0.0.0.0/0` | SSH |
+| 80   | `0.0.0.0/0` | Let's Encrypt HTTP-01, and Cloudflare |
+| 443  | `0.0.0.0/0` | Cloudflare |
+| 5432 | the API VM's private address, `/32` | the only client the database has |
+
+Restricting 80 and 443 to [Cloudflare's published ranges](https://www.cloudflare.com/ips/)
+is worth doing once this is running: with the record proxied, nothing else has
+any business reaching the origin directly.
+
+Each instance's own `iptables` must be opened as well — see sections 3 and 6.
+Oracle's Ubuntu images drop traffic the security list has already permitted,
+and the resulting silence looks exactly like a security-list mistake.
+
+## 3. Database
 
 PostgreSQL runs on the second micro instance and is reached over the VCN's
 private network. The application code is identical whatever you point it at;
@@ -116,7 +152,7 @@ network, so install `postgresql-client` there. Its `pg_dump` must be at least
 the server's major version. Backups are now yours, not a provider's — and a
 backup you have never restored is a guess.
 
-## 3. Object storage
+## 4. Object storage
 
 Create a Cloudflare R2 bucket and an API token with read and write access.
 Fill in `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and
@@ -129,7 +165,7 @@ itself, which is simpler and keeps pictures behind authentication.
 Leaving `R2_ENDPOINT` empty falls back to local disk storage. That is for
 development only — it ties your pictures to one free-tier instance's lifetime.
 
-## 4. Build and install the API
+## 5. Build and install the API
 
 On the VM (or cross-compile for `aarch64-unknown-linux-gnu`):
 
@@ -164,13 +200,32 @@ variables does nothing — they are a bootstrap, not a source of truth.
 Set a real `ADMIN_PASSWORD` before the first boot. Change it from the account
 page afterwards.
 
-## 5. Caddy
+## 6. Caddy
 
 ```bash
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
 # edit api.example.com to your domain
 sudo systemctl reload caddy
 ```
+
+### Getting the first certificate
+
+Cloudflare must be **temporarily unproxied** for Caddy's first issuance. With
+the record proxied and SSL mode Full (strict), Cloudflare reaches the origin
+over HTTPS whatever scheme the client used — including Let's Encrypt's HTTP-01
+challenge — and the origin has no certificate yet, so the challenge fails on
+the very thing it was going to fix.
+
+Grey-cloud the `api` record, let Caddy obtain the certificate, then turn the
+orange cloud back on. Renewals are unaffected: by then the origin has a valid
+certificate, so the proxied HTTPS hop succeeds.
+
+The alternative, if that dance annoys you, is a Cloudflare **Origin CA**
+certificate — valid 15 years, trusted by Cloudflare only, which is all a
+proxied origin needs. Point Caddy at it with `tls <cert> <key>` and ACME never
+runs.
+
+### Firewall
 
 Open ports 80 and 443 in both the Oracle security list **and** the instance's
 own firewall. Oracle images ship with iptables rules that block traffic even
@@ -182,7 +237,7 @@ sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
 sudo netfilter-persistent save
 ```
 
-## 6. Cloudflare Pages
+## 7. Cloudflare Pages
 
 The frontend is built and deployed by `.github/workflows/deploy-web.yml`, not by
 Cloudflare's Git integration: the build definition belongs in this repository
@@ -227,7 +282,7 @@ Cloudflare creates the DNS record itself when the zone is in the same account.
 If this is refused for permissions, either add *Zone - DNS - Edit* for that zone
 to the token or add the `CNAME` to `grid-reveal.pages.dev` by hand.
 
-## 7. Configure CORS and cookies
+## 8. Configure CORS and cookies
 
 In the API's `.env`:
 
@@ -240,7 +295,7 @@ CORS_ALLOWED_ORIGINS=https://app.example.com
 Credentialed CORS cannot use a wildcard origin, so this list must name the web
 host exactly.
 
-## 8. Verify the cookie flow
+## 9. Verify the cookie flow
 
 This is the integration most likely to be subtly wrong, so check it before
 anything else:
@@ -254,7 +309,7 @@ anything else:
 
 If step 3 fails, the usual cause is `COOKIE_DOMAIN` not matching both hosts.
 
-## 9. Backups
+## 10. Backups
 
 If you self-host PostgreSQL:
 
