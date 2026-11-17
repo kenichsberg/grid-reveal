@@ -147,8 +147,29 @@ jobs:
               echo "Project $PROJECT_NAME already exists."
               ;;
             404)
-              npx --yes "wrangler@$WRANGLER_VERSION" pages project create "$PROJECT_NAME" \
-                --production-branch=main
+              # Created through the API rather than `wrangler pages project
+              # create`, which reports a refusal as "An unknown error occurred
+              # [code: 8000000]" and discards the message Cloudflare actually
+              # sent. One HTTP client for both halves of this step also means
+              # one place where the credentials are used.
+              created=$(curl -sS -w '\n%{http_code}' -X POST \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data "{\"name\":\"$PROJECT_NAME\",\"production_branch\":\"main\"}" \
+                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects")
+              created_status=${created##*$'\n'}
+              created_body=${created%$'\n'*}
+
+              if [ "$created_status" = "200" ]; then
+                echo "Created Pages project $PROJECT_NAME."
+              else
+                echo "Creating $PROJECT_NAME failed with HTTP $created_status:" >&2
+                echo "$created_body" >&2
+                echo >&2
+                echo "The project name doubles as the $PROJECT_NAME.pages.dev subdomain, which is" >&2
+                echo "global: if it is taken, change PROJECT_NAME in this workflow." >&2
+                exit 1
+              fi
               ;;
             *)
               # The body, not just the status: Cloudflare answers a token that
