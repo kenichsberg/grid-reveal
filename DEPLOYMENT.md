@@ -181,33 +181,67 @@ itself, which is simpler and keeps pictures behind authentication.
 Leaving `R2_ENDPOINT` empty falls back to local disk storage. That is for
 development only — it ties your pictures to one free-tier instance's lifetime.
 
-## 5. Build and install the API
+## 5. Install the API
 
-On the VM (or cross-compile for `aarch64-unknown-linux-gnu`):
+The binary is built by CI and attached to a release, so the VM needs neither a
+Rust toolchain nor a clone of this repository. It could not build it anyway:
+`cargo build --release` over this dependency set exhausts 1 GB during codegen
+and linking, which is what `.github/workflows/release-api.yml` exists to avoid.
+
+Everything below comes from one tag, so the unit file, the backup script and
+the binary cannot drift apart:
 
 ```bash
-cd apps/api
-cargo build --release
+VERSION=v0.1.0
+BASE=https://github.com/kenichsberg/grid-reveal
+RAW=https://raw.githubusercontent.com/kenichsberg/grid-reveal/$VERSION
+
+curl -fLO $BASE/releases/download/$VERSION/grid-reveal-api
+curl -fLO $BASE/releases/download/$VERSION/grid-reveal-api.sha256
+sha256sum -c grid-reveal-api.sha256
 ```
 
-The `webp` crate compiles vendored libwebp, so the build host needs a C
-compiler (`build-essential` on Debian/Ubuntu).
-
-Then:
+Do not skip the checksum. It is the only thing standing between a truncated
+download and a service that fails to start for reasons that look like anything
+but a truncated download.
 
 ```bash
 sudo useradd --system --home /opt/grid-reveal gridreveal
 sudo mkdir -p /opt/grid-reveal/data
-sudo cp target/release/grid-reveal-api /opt/grid-reveal/
-sudo cp ../../deploy/backup.sh /opt/grid-reveal/
-sudo cp /path/to/your/.env /opt/grid-reveal/.env
+sudo install -m 755 grid-reveal-api /opt/grid-reveal/
+
+sudo curl -fL -o /opt/grid-reveal/backup.sh $RAW/deploy/backup.sh
+sudo chmod +x /opt/grid-reveal/backup.sh
+sudo curl -fL -o /etc/systemd/system/grid-reveal-api.service \
+  $RAW/deploy/grid-reveal-api.service
+
+# From .env.example, with the values from sections 3, 4 and 8.
+sudo -e /opt/grid-reveal/.env
+
 sudo chown -R gridreveal:gridreveal /opt/grid-reveal
 sudo chmod 600 /opt/grid-reveal/.env
 
-sudo cp ../../deploy/grid-reveal-api.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now grid-reveal-api
+sudo systemctl status grid-reveal-api --no-pager
 ```
+
+Migrations run at startup, so the first start is also when the schema is
+created. If the service fails, `journalctl -u grid-reveal-api -n 50` will
+almost always name the reason — usually `DATABASE_URL`.
+
+### Upgrading
+
+Download the new binary as above, then:
+
+```bash
+sudo install -m 755 grid-reveal-api /opt/grid-reveal/
+sudo chown gridreveal:gridreveal /opt/grid-reveal/grid-reveal-api
+sudo systemctl restart grid-reveal-api
+```
+
+Keep the previous binary beside it if you want the rollback at the end of
+this guide to be a single command rather than another download.
 
 On first boot the API creates an administrator from `ADMIN_USERNAME` and
 `ADMIN_PASSWORD` if no administrator exists. Once one exists, changing those
@@ -219,8 +253,9 @@ page afterwards.
 ## 6. Caddy
 
 ```bash
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-# edit grid-reveal-api.example.com to your domain
+sudo curl -fL -o /etc/caddy/Caddyfile \
+  https://raw.githubusercontent.com/kenichsberg/grid-reveal/v0.1.0/deploy/Caddyfile
+sudo sed -i 's/grid-reveal-api\.example\.com/grid-reveal-api.<domain>/' /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
@@ -339,5 +374,20 @@ never restored is a guess.
 
 ## Rollback
 
-Redeploy a prior commit. Migrations are the only destructive step; since there
-is no production data before launch, forward-fix is the expected path.
+The frontend and the API roll back differently, because they are released
+differently.
+
+**Frontend.** Cloudflare Pages keeps every deployment. Promote an earlier one
+from the project's Deployments list, or push a revert — a deploy is 40 seconds.
+
+**API.** Install the previous release's binary and restart:
+
+```bash
+sudo install -m 755 /opt/grid-reveal/grid-reveal-api.prev /opt/grid-reveal/grid-reveal-api
+sudo systemctl restart grid-reveal-api
+```
+
+Migrations are the one step this does not undo: an older binary against a newer
+schema is only safe when the migration was additive. Since there is no
+production data before launch, forward-fix is the expected path, and rolling
+back a migration means restoring the dump from section 10.
