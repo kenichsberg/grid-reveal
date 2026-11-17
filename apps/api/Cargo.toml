@@ -2,7 +2,11 @@
 name = "grid-reveal-api"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+# The lockfile reaches crates that require edition 2024 (icu_provider, via
+# sqlx's idna chain), which needs 1.85 at the least. Set to the toolchain this
+# is developed and released with rather than to that floor: nothing else
+# compiles this binary, so a lower claim would buy nothing and go unverified.
+rust-version = "1.93"
 
 [dependencies]
 axum = { version = "0.8", features = ["multipart", "macros"] }

@@ -32,11 +32,13 @@ jobs:
     # the runner's own Ubuntu would pin it to that runner's glibc and strand
     # the binary on anything less current.
     #
-    # The tag pins Rust to the `rust-version` in apps/api/Cargo.toml, so CI
-    # cannot quietly build with a newer compiler than the project claims to
-    # support. The non-slim image is buildpack-deps based, so gcc (for
-    # libwebp) and git (for checkout) are already present.
-    container: rust:1.82-bullseye
+    # The tag matches `rust-version` in apps/api/Cargo.toml exactly, so CI
+    # builds with the compiler the project claims to support rather than
+    # whatever is newest — and a dependency that outgrows that claim fails
+    # here instead of on someone's machine. The non-slim image is
+    # buildpack-deps based, so gcc (for libwebp) and git (for checkout) are
+    # already present.
+    container: rust:1.93-bullseye
 
     defaults:
       run:
