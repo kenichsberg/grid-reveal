@@ -53,6 +53,54 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check the Cloudflare credentials are well formed
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Cloudflare answers a blank or malformed Authorization header with
+          # code 9106 and the words "Authentication failed", which sends you
+          # looking at the token's permissions when the value itself is the
+          # problem — most often a trailing newline, because `echo x | gh secret
+          # set` keeps it. These checks name that directly. Neither prints a
+          # secret: only its length, and only when it is already wrong.
+          fail=0
+
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "CLOUDFLARE_API_TOKEN is empty." >&2
+            fail=1
+          else
+            case "$CLOUDFLARE_API_TOKEN" in
+              *[!A-Za-z0-9_-]*)
+                echo "CLOUDFLARE_API_TOKEN holds characters outside [A-Za-z0-9_-]" >&2
+                echo "(length ${#CLOUDFLARE_API_TOKEN}; a Cloudflare token is 40). It was stored with" >&2
+                echo "surrounding whitespace, a newline or quotes." >&2
+                fail=1
+                ;;
+            esac
+          fi
+
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "CLOUDFLARE_ACCOUNT_ID is empty." >&2
+            fail=1
+          else
+            case "$CLOUDFLARE_ACCOUNT_ID" in
+              *[!0-9a-f]*)
+                echo "CLOUDFLARE_ACCOUNT_ID is not 32 lowercase hex characters" >&2
+                echo "(length ${#CLOUDFLARE_ACCOUNT_ID}). It was stored with whitespace or quotes." >&2
+                fail=1
+                ;;
+            esac
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo >&2
+            echo "Re-set it without a trailing newline:" >&2
+            echo "  printf '%s' '<value>' | gh secret set <NAME>" >&2
+            exit 1
+          fi
+          echo "Credentials look well formed."
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
