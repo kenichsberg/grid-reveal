@@ -88,9 +88,12 @@ jobs:
           # whose table layout is not a contract, and branched on rather than
           # created with `|| true`, which would swallow a bad token and report it
           # later as a confusing deploy failure.
-          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+          response=$(curl -sS -w '\n%{http_code}' \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT_NAME")
+          status=${response##*$'\n'}
+          body=${response%$'\n'*}
+
           case "$status" in
             200)
               echo "Project $PROJECT_NAME already exists."
@@ -100,8 +103,15 @@ jobs:
                 --production-branch=main
               ;;
             *)
-              echo "Cloudflare answered HTTP $status. A 401 or 403 means CLOUDFLARE_API_TOKEN" >&2
-              echo "lacks Account > Cloudflare Pages > Edit, or CLOUDFLARE_ACCOUNT_ID is wrong." >&2
+              # The body, not just the status: Cloudflare answers a token that
+              # lacks the right permission with HTTP 400 and code 10000 on this
+              # endpoint, which is indistinguishable from a malformed account id
+              # until you read the message. It names no credential, so printing
+              # it leaks nothing.
+              echo "Cloudflare answered HTTP $status: $body" >&2
+              echo >&2
+              echo "code 10000 or 9109: CLOUDFLARE_API_TOKEN lacks Account > Cloudflare Pages > Edit," >&2
+              echo "or is scoped to a different account than CLOUDFLARE_ACCOUNT_ID." >&2
               exit 1
               ;;
           esac
