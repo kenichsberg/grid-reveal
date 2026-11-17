@@ -4,9 +4,10 @@ The application is two deploy targets from one repository: a static SPA on
 Cloudflare Pages and a Rust binary on a VM.
 
 ```
-  apps/web   SvelteKit + adapter-static  ->  Cloudflare Pages   app.<domain>
-  apps/api   Rust / axum                 ->  Oracle Ampere A1   api.<domain>
-                                              Caddy TLS, CF-proxied
+  apps/web   SvelteKit + adapter-static  ->  Cloudflare Pages      app.<domain>
+  apps/api   Rust / axum                 ->  Oracle AMD micro VM   api.<domain>
+                                                Caddy TLS, CF-proxied
+  database   PostgreSQL                  ->  Oracle AMD micro VM   private subnet, no DNS
 ```
 
 ## Prerequisites
@@ -19,30 +20,101 @@ lets it be `SameSite=Lax` — CSRF-resistant without a separate token. Serving
 the frontend from `*.pages.dev` against a bare VM address would force
 `SameSite=None`, which is weaker and more fragile. About $10/year.
 
-**An Oracle Always Free Ampere A1 instance.** Capacity is frequently
-unavailable in popular regions; provisioning can take repeated attempts over
-several days. Nothing in the design is Oracle-specific, so any small VPS works
-as a fallback.
+**Two Oracle Always Free AMD micro instances**, in the same VCN: one for the
+API, one for PostgreSQL. Always Free includes exactly two, so this uses the
+allowance rather than exceeding it. Each is 1/8 OCPU and 1 GB of RAM, which is
+why they are separated — see section 2. Ampere A1 shapes are larger and often
+unobtainable; nothing here is Oracle-specific, so any two small VPSs work.
 
 ## 1. DNS
 
 Point `app.<domain>` and `api.<domain>` at Cloudflare. Proxy both (orange
 cloud). Proxying `api` also hides the VM's address.
 
+The database VM gets no DNS record of any kind. It is reached only by its
+private VCN address, and nothing outside the subnet should be able to name it.
+
 Set the Cloudflare SSL mode to **Full (strict)** so the hop from Cloudflare to
 your origin is verified, not just encrypted.
 
 ## 2. Database
 
-Either option works; the application code is identical and the choice is just
-`DATABASE_URL`.
+PostgreSQL runs on the second micro instance and is reached over the VCN's
+private network. The application code is identical whatever you point it at;
+the choice is only `DATABASE_URL`.
 
-- **Neon free tier** — managed, with backups handled for you. Suspends when
-  idle, adding roughly 500ms to the first request after a quiet period.
-- **PostgreSQL on the VM** — no cold start and one less vendor, on a machine
-  with 24 GB of RAM. Backups become yours: use `deploy/backup.sh`.
+Keeping it off the API host matters more at this size than it would on a large
+machine. A 1 GB instance has no room to hold a Postgres buffer pool *and* the
+decode spike an image upload causes, which `apps/api/src/images.rs` caps at
+128 MB. Separating them means neither can starve the other, and a runaway query
+cannot take the API down with it.
+
+On the database VM:
+
+```bash
+sudo apt install -y postgresql
+sudo -u postgres createuser --pwprompt griduser
+sudo -u postgres createdb --owner=griduser griddb
+```
+
+Then bind it to the private address only — never `0.0.0.0` — in
+`/etc/postgresql/*/main/postgresql.conf`:
+
+```
+listen_addresses = '10.0.0.<db>'
+```
+
+and admit exactly one client, in `pg_hba.conf`:
+
+```
+host  griddb  griduser  10.0.0.<api>/32  scram-sha-256
+```
+
+Open 5432 in the Oracle security list **from the API VM's private address
+only**, and remember the instance's own `iptables` as well — Ubuntu images ship
+with rules that drop what the security list permits:
+
+```bash
+sudo iptables -I INPUT -p tcp -s 10.0.0.<api> --dport 5432 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+### Sizing for 1 GB
+
+Defaults assume a far larger machine. In `postgresql.conf`:
+
+```
+shared_buffers = 192MB
+effective_cache_size = 512MB
+work_mem = 4MB
+max_connections = 20
+```
+
+`max_connections` is deliberately close to the API's pool of 10
+(`apps/api/src/db.rs`): each backend costs memory, and nothing else connects.
+Add 2 GB of swap on both VMs as a backstop.
+
+### Connecting
+
+On the API host:
+
+```
+DATABASE_URL=postgres://griduser:<password>@10.0.0.<db>:5432/griddb?sslmode=require
+```
+
+Debian and Ubuntu's `postgresql` package enables TLS with a self-signed
+certificate out of the box, so `sslmode=require` works with nothing further to
+configure. It encrypts the hop without verifying the certificate, which is the
+right trade inside a subnet you control and strictly better than plaintext.
 
 Migrations run automatically at API startup, so there is no separate step.
+
+### Backups
+
+`deploy/backup.sh` runs on the API host and reaches the database over the
+network, so install `postgresql-client` there. Its `pg_dump` must be at least
+the server's major version. Backups are now yours, not a provider's — and a
+backup you have never restored is a guess.
 
 ## 3. Object storage
 
