@@ -4,10 +4,10 @@ The application is two deploy targets from one repository: a static SPA on
 Cloudflare Pages and a Rust binary on a VM.
 
 ```
-  apps/web   SvelteKit + adapter-static  ->  Cloudflare Pages      app.<domain>
-  apps/api   Rust / axum                 ->  Oracle AMD micro VM   api.<domain>
+  apps/web   SvelteKit + adapter-static  ->  Cloudflare Pages      grid-reveal.<domain>
+  apps/api   Rust / axum                 ->  Oracle AMD micro VM   grid-reveal-api.<domain>
                                                 Caddy TLS, CF-proxied
-  database   PostgreSQL                  ->  Oracle AMD micro VM   private subnet, no DNS
+  database   PostgreSQL                  ->  Oracle AMD micro VM   VCN-internal name only
 ```
 
 ## Prerequisites
@@ -28,11 +28,20 @@ unobtainable; nothing here is Oracle-specific, so any two small VPSs work.
 
 ## 1. DNS
 
-Point `app.<domain>` and `api.<domain>` at Cloudflare. Proxy both (orange
-cloud). Proxying `api` also hides the VM's address.
+Point `grid-reveal.<domain>` and `grid-reveal-api.<domain>` at Cloudflare.
+Proxy both (orange cloud). Proxying the API host also hides the VM's address.
 
-The database VM gets no DNS record of any kind. It is reached only by its
-private VCN address, and nothing outside the subnet should be able to name it.
+Both are deliberately **first-level** subdomains. Cloudflare's free Universal
+SSL covers the apex and one level only, so a name like
+`grid-reveal.api.<domain>` would need Total TLS or Advanced Certificate
+Manager — a paid add-on to say the same thing a hyphen says for nothing.
+
+The database VM gets no public DNS record. Give the instance the hostname
+`grid-reveal-db` when you create it and Oracle's internal resolver answers for
+`grid-reveal-db.<subnet>.<vcn>.oraclevcn.com` inside the VCN, which is the
+readable name without the exposure. A public record would either publish the
+database host's address or, pointing at an RFC 1918 address, be discarded by
+resolvers that reject private addresses in public answers.
 
 Set the Cloudflare SSL mode to **Full (strict)** so the hop from Cloudflare to
 your origin is verified, not just encrypted.
@@ -211,7 +220,7 @@ page afterwards.
 
 ```bash
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-# edit api.example.com to your domain
+# edit grid-reveal-api.example.com to your domain
 sudo systemctl reload caddy
 ```
 
@@ -257,7 +266,7 @@ Give it its credentials once, from a terminal:
 ```bash
 gh secret   set CLOUDFLARE_API_TOKEN     # Account > Cloudflare Pages > Edit
 gh secret   set CLOUDFLARE_ACCOUNT_ID    # `wrangler whoami`, or the dashboard URL
-gh variable set PUBLIC_API_BASE_URL      # https://api.<domain>
+gh variable set PUBLIC_API_BASE_URL      # https://grid-reveal-api.<domain>
 ```
 
 The token is made at **My Profile > API Tokens > Create Token > Custom token**
@@ -282,7 +291,7 @@ curl -X POST \
   "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/grid-reveal/domains" \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
   -H "Content-Type: application/json" \
-  --data '{"name":"app.<domain>"}'
+  --data '{"name":"grid-reveal.<domain>"}'
 ```
 
 Cloudflare creates the DNS record itself when the zone is in the same account.
@@ -296,7 +305,7 @@ In the API's `.env`:
 ```
 COOKIE_DOMAIN=.example.com
 COOKIE_SECURE=true
-CORS_ALLOWED_ORIGINS=https://app.example.com
+CORS_ALLOWED_ORIGINS=https://grid-reveal.example.com
 ```
 
 Credentialed CORS cannot use a wildcard origin, so this list must name the web
@@ -307,7 +316,7 @@ host exactly.
 This is the integration most likely to be subtly wrong, so check it before
 anything else:
 
-1. Open `https://app.<domain>` and sign in as the bootstrap administrator.
+1. Open `https://grid-reveal.<domain>` and sign in as the bootstrap administrator.
 2. In devtools, confirm the `grid_session` cookie has `Domain=.<domain>`,
    `Secure`, `HttpOnly`, and `SameSite=Lax`.
 3. Reload. You should stay signed in — that proves the cookie is being sent

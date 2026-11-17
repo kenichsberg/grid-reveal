@@ -4,7 +4,7 @@
 # certificate. Caddy obtains and renews it from Let's Encrypt automatically;
 # set the Cloudflare SSL mode to "Full (strict)" so the hop is verified.
 
-api.example.com {
+grid-reveal-api.example.com {
     encode zstd gzip
 
     # Uploads are capped at 10 MB by the API; allow a little multipart overhead.
