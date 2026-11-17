@@ -51,10 +51,17 @@ only (section 3). A public address on the instance and a service exposed to the
 internet are different things, and conflating them is what makes people reach
 for a NAT gateway they do not need.
 
-**Reserve the API VM's public IP.** Oracle hands out ephemeral addresses by
-default and they change when an instance is stopped and started, which would
-silently break the `api` DNS record. Reserving it is free and takes one click:
-*Instance > Attached VNICs > ... > Edit > Reserved public IP*.
+**Reserve the API VM's public IP**, before pointing any DNS at it. Oracle hands
+out ephemeral addresses by default and they change when an instance is stopped
+and started, which would break the `api` record with nobody having touched it.
+
+The setting is on the address, not on the instance or the VNIC:
+*Instance > Attached VNICs > the VNIC > IPv4 Addresses > the row's ⋮ > Edit*.
+
+It takes two passes, because ephemeral cannot be converted in place: edit once
+to **No public IP**, which releases the current address, then edit again to
+**Reserved public IP** and create one. The instance comes back on a different
+address than it had — harmless now, considerably less so once DNS names it.
 
 Security list ingress rules for the subnet:
 
