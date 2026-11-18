@@ -387,7 +387,9 @@ is not involved.
 corporate networks and some ISPs drop or mangle. The TCP fallback does not
 always happen once a QUIC connection has broken mid-stream.
 
-Turn HTTP/3 off under **Network** in the Cloudflare dashboard. The advertisement
+Turn HTTP/3 off under **Speed - Settings - Protocol Optimization** in the
+Cloudflare dashboard, having selected the zone first; it is not an
+account-level setting. The advertisement
 is cached for `ma=86400`, so restart the browser or flush it at
 `chrome://net-internals/#sockets` before retesting. The cost is a small latency
 gain lost on mobile networks, against a failure mode indistinguishable from an
