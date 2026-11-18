@@ -232,16 +232,36 @@ almost always name the reason — usually `DATABASE_URL`.
 
 ### Upgrading
 
-Download the new binary as above, then:
+Install the updater once, from the same tag as everything else:
+
+```bash
+sudo curl -fL -o /opt/grid-reveal/update-api.sh $RAW/deploy/update-api.sh
+sudo chmod +x /opt/grid-reveal/update-api.sh
+```
+
+From then on an upgrade is one command:
+
+```bash
+sudo /opt/grid-reveal/update-api.sh            # the latest release
+sudo /opt/grid-reveal/update-api.sh v0.1.1     # a specific tag
+```
+
+It verifies the checksum before installing anything, keeps the running binary
+as `grid-reveal-api.prev`, restarts the service, and polls `/health` for 30
+seconds. If the new binary does not answer it puts the old one back and
+restarts again, so a bad release costs seconds rather than however long it
+takes you to notice. It exits non-zero in that case.
+
+The script changes with the repository, so re-fetch it when you move to a tag
+that has altered it — it does not update itself.
+
+To upgrade by hand instead:
 
 ```bash
 sudo install -m 755 grid-reveal-api /opt/grid-reveal/
 sudo chown gridreveal:gridreveal /opt/grid-reveal/grid-reveal-api
 sudo systemctl restart grid-reveal-api
 ```
-
-Keep the previous binary beside it if you want the rollback at the end of
-this guide to be a single command rather than another download.
 
 On first boot the API creates an administrator from `ADMIN_USERNAME` and
 `ADMIN_PASSWORD` if no administrator exists. Once one exists, changing those
