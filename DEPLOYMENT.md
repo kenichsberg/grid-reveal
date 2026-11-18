@@ -252,6 +252,21 @@ page afterwards.
 
 ## 6. Caddy
 
+Caddy is not on the image. Install it from its own apt repository, which is
+also what keeps it updated:
+
+```bash
+sudo apt install --yes debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install --yes caddy
+```
+
+Then replace its placeholder configuration:
+
 ```bash
 sudo curl -fL -o /etc/caddy/Caddyfile \
   https://raw.githubusercontent.com/kenichsberg/grid-reveal/v0.1.0/deploy/Caddyfile
