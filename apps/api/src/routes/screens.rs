@@ -314,17 +314,24 @@ async fn geometry_preview(
     let picture = selectable_picture(&state.db, query.picture_id).await?;
     let aspect = picture.aspect();
 
+    // The target is what the administrator is committing to; the unit is only
+    // how finely it is divided, so the unit gives way when the two conflict.
+    let unit_minutes =
+        geometry::effective_unit_minutes(query.target_total_minutes, query.unit_minutes);
+
     let solved = match query.cols {
-        Some(cols) => geometry::solve_with_cols(query.target_total_minutes, query.unit_minutes, cols),
-        None => geometry::solve(query.target_total_minutes, query.unit_minutes, aspect),
+        Some(cols) => geometry::solve_with_cols(query.target_total_minutes, unit_minutes, cols),
+        None => geometry::solve(query.target_total_minutes, unit_minutes, aspect),
     };
 
     Ok(Json(GeometryPreview {
         cols: solved.cols,
         rows: solved.rows,
         total_tiles: solved.total_tiles(),
-        exact_total_minutes: solved.exact_total_minutes(query.unit_minutes),
+        exact_total_minutes: solved.exact_total_minutes(unit_minutes),
         requested_total_minutes: query.target_total_minutes,
+        unit_minutes,
+        requested_unit_minutes: query.unit_minutes,
         cell_squareness: geometry::cell_squareness(solved, aspect),
     }))
 }
@@ -343,9 +350,12 @@ async fn create(
     validate_window(body.starts_on, body.ends_on, body.auto_archive_days)?;
 
     let picture = selectable_picture(&state.db, body.picture_id).await?;
+    // Matches the preview the administrator was shown; see `geometry_preview`.
+    let unit_minutes =
+        geometry::effective_unit_minutes(body.target_total_minutes, body.unit_minutes);
     let solved = match body.cols {
-        Some(cols) => geometry::solve_with_cols(body.target_total_minutes, body.unit_minutes, cols),
-        None => geometry::solve(body.target_total_minutes, body.unit_minutes, picture.aspect()),
+        Some(cols) => geometry::solve_with_cols(body.target_total_minutes, unit_minutes, cols),
+        None => geometry::solve(body.target_total_minutes, unit_minutes, picture.aspect()),
     };
 
     let slug = unique_slug(&state.db).await?;
@@ -364,7 +374,7 @@ async fn create(
     .bind(picture.id)
     .bind(solved.cols)
     .bind(solved.rows)
-    .bind(body.unit_minutes)
+    .bind(unit_minutes)
     .bind(&permutation)
     .bind(admin.user.id)
     .bind(body.starts_on)

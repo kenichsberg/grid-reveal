@@ -7,6 +7,16 @@ export type GeometryPreview = { cols: number, rows: number, total_tiles: number,
  */
 exact_total_minutes: number, requested_total_minutes: number, 
 /**
+ * What a tile is worth in the solved grid. Raised above the request when
+ * the target would otherwise need more tiles than the solver allows.
+ */
+unit_minutes: number, 
+/**
+ * What the administrator asked a tile to be worth, so the form can say
+ * plainly that it changed.
+ */
+requested_unit_minutes: number, 
+/**
  * 1.0 means exactly square cells; larger is more oblong.
  */
 cell_squareness: number, };

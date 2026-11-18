@@ -40,7 +40,30 @@ impl Geometry {
 pub const MAX_TILES: i32 = 20_000;
 pub const MAX_DIMENSION: i32 = 500;
 
+/// The unit the solver should actually use for this target.
+///
+/// `MAX_TILES` is a bound on the grid, not on the administrator's intent. When
+/// a target needs more tiles than the ceiling allows, raising what a tile is
+/// worth keeps the total they asked for, where clamping the tile count discards
+/// it silently: 3600 hours at 5 minutes a tile wants 43,200 tiles, and clamping
+/// turns the screen into a 1666 hour one without ever saying so.
+///
+/// Granularity is the right thing to give up here. A tile is the unit progress
+/// is logged in; the total is the thing being tracked.
+pub fn effective_unit_minutes(target_minutes: i64, unit_minutes: i32) -> i32 {
+    if unit_minutes <= 0 || target_minutes <= 0 {
+        return unit_minutes.max(1);
+    }
+    let ceiling = i64::from(MAX_TILES);
+    // Ceiling division: the smallest unit whose tile count fits under the cap.
+    let needed = (target_minutes + ceiling - 1) / ceiling;
+    needed.max(i64::from(unit_minutes)).min(i64::from(i32::MAX)) as i32
+}
+
 /// Tiles implied by a target total and a unit, clamped to something sane.
+///
+/// Callers that want the target honoured pass a unit from
+/// [`effective_unit_minutes`]; the clamp here is the last-resort bound.
 pub fn desired_tiles(target_minutes: i64, unit_minutes: i32) -> i32 {
     if unit_minutes <= 0 || target_minutes <= 0 {
         return 1;
@@ -141,6 +164,46 @@ pub fn cell_squareness(geometry: Geometry, aspect: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_target_that_fits_leaves_the_unit_alone() {
+        // 40 hours at 5 minutes a tile is 480 tiles: nowhere near the ceiling.
+        assert_eq!(effective_unit_minutes(40 * 60, 5), 5);
+    }
+
+    #[test]
+    fn a_target_over_the_ceiling_raises_the_unit_instead_of_losing_hours() {
+        // The case that prompted this: 3600 hours at 5 minutes a tile wants
+        // 43,200 tiles. Clamping produced a 1666 hour screen.
+        let unit = effective_unit_minutes(3600 * 60, 5);
+        assert!(unit > 5, "the unit is raised, got {unit}");
+
+        let g = solve(3600 * 60, unit, 1.5);
+        assert!(g.total_tiles() <= MAX_TILES, "still under the ceiling");
+
+        let hours = g.exact_total_minutes(unit) as f64 / 60.0;
+        assert!(
+            (hours - 3600.0).abs() / 3600.0 < 0.05,
+            "within 5% of the target, got {hours}"
+        );
+    }
+
+    #[test]
+    fn the_raised_unit_is_the_smallest_one_that_fits() {
+        let unit = effective_unit_minutes(3600 * 60, 5);
+        assert_eq!(unit, 11, "216000 / 20000 rounds up to 11");
+        assert!(desired_tiles(3600 * 60, unit) <= MAX_TILES);
+        assert!(
+            desired_tiles(3600 * 60, unit - 1) >= MAX_TILES,
+            "one minute less would not fit"
+        );
+    }
+
+    #[test]
+    fn a_degenerate_unit_is_not_made_worse() {
+        assert_eq!(effective_unit_minutes(0, 5), 5);
+        assert_eq!(effective_unit_minutes(600, 0), 1);
+    }
 
     #[test]
     fn exact_factorisation_is_found_when_one_exists() {

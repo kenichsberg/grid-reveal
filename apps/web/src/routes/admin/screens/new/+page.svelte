@@ -40,6 +40,15 @@
     preview !== null && preview.exact_total_minutes !== preview.requested_total_minutes
   );
 
+  /**
+   * The solver raises the minutes a tile is worth when the target would need
+   * more tiles than it allows. Worth saying outright: the number the
+   * administrator typed is not the one the screen will use.
+   */
+  const unitRaised = $derived(
+    preview !== null && preview.unit_minutes !== preview.requested_unit_minutes
+  );
+
   async function loadPictures() {
     try {
       pictures = await api.listPictures();
@@ -218,12 +227,26 @@
               <strong>{preview.total_tiles}</strong>
             </div>
             <div>
-              <span class="muted small">Exact total</span>
+              <span class="muted small">Minutes per tile</span>
+              <strong>{preview.unit_minutes}</strong>
+            </div>
+            <div>
+              <span class="muted small">This screen tracks</span>
               <strong>{formatMinutes(preview.exact_total_minutes)}</strong>
             </div>
           </div>
 
-          {#if snapped}
+          {#if unitRaised}
+            <!-- The target needed more tiles than the solver allows, so the
+                 unit was raised to keep the total. Naming the cause matters:
+                 the shape of the picture is not why this one moved. -->
+            <p class="muted small snap">
+              {preview.requested_unit_minutes} minutes a tile would need more tiles than a
+              grid can hold, so tiles are {preview.unit_minutes} minutes each — keeping your
+              {formatMinutes(preview.requested_total_minutes)} target at
+              {formatMinutes(preview.exact_total_minutes)}.
+            </p>
+          {:else if snapped}
             <!-- Not every tile count factors into a rectangle matching the
                  picture, so the target is snapped and the real figure shown. -->
             <p class="muted small snap">

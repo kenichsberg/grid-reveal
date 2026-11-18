@@ -125,6 +125,12 @@ pub struct GeometryPreview {
     pub exact_total_minutes: i64,
     #[ts(type = "number")]
     pub requested_total_minutes: i64,
+    /// What a tile is worth in the solved grid. Raised above the request when
+    /// the target would otherwise need more tiles than the solver allows.
+    pub unit_minutes: i32,
+    /// What the administrator asked a tile to be worth, so the form can say
+    /// plainly that it changed.
+    pub requested_unit_minutes: i32,
     /// 1.0 means exactly square cells; larger is more oblong.
     pub cell_squareness: f64,
 }
