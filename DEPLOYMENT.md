@@ -375,6 +375,24 @@ anything else:
 
 If step 3 fails, the usual cause is `COOKIE_DOMAIN` not matching both hosts.
 
+### When the browser cannot reach an API that is demonstrably up
+
+If `curl` against the API succeeds from anywhere — health, preflight and a real
+response all correct — while the browser reports that the server is
+unreachable, read the console rather than going back to the origin. The origin
+is not involved.
+
+`net::ERR_QUIC_PROTOCOL_ERROR` means Chrome took Cloudflare's
+`alt-svc: h3=":443"` advertisement and moved to HTTP/3 over UDP 443, which VPNs,
+corporate networks and some ISPs drop or mangle. The TCP fallback does not
+always happen once a QUIC connection has broken mid-stream.
+
+Turn HTTP/3 off under **Network** in the Cloudflare dashboard. The advertisement
+is cached for `ma=86400`, so restart the browser or flush it at
+`chrome://net-internals/#sockets` before retesting. The cost is a small latency
+gain lost on mobile networks, against a failure mode indistinguishable from an
+outage.
+
 ## 10. Backups
 
 If you self-host PostgreSQL:
