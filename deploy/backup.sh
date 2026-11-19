@@ -8,6 +8,18 @@
 # database before trusting this.
 set -euo pipefail
 
+# cron starts with almost no environment, so the configuration is read from the
+# same file the service uses rather than inherited. Sourcing it means a value
+# containing $, backticks or quotes is interpreted by the shell where systemd
+# would take it literally: keep these values plain.
+ENV_FILE="${ENV_FILE:-/opt/grid-reveal/.env}"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
 : "${DATABASE_URL:?DATABASE_URL must be set}"
 : "${R2_BUCKET:?R2_BUCKET must be set}"
 

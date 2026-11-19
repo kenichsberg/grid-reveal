@@ -417,15 +417,60 @@ outage.
 
 ## 10. Backups
 
-If you self-host PostgreSQL:
+`deploy/backup.sh` dumps the database and uploads it to R2. It needs two things
+on the API host that nothing else here installs:
+
+```bash
+sudo apt install -y postgresql-client awscli
+```
+
+`pg_dump` must be at least the server's major version, and the script uses the
+`aws` CLI against R2's S3 endpoint. Configure it for the `root` crontab, since
+that is what will run it:
+
+```bash
+sudo aws configure set aws_access_key_id "<R2_ACCESS_KEY_ID>"
+sudo aws configure set aws_secret_access_key "<R2_SECRET_ACCESS_KEY>"
+sudo aws configure set region auto
+```
+
+Then schedule it:
 
 ```bash
 sudo crontab -e
 # 15 3 * * * /opt/grid-reveal/backup.sh >> /var/log/grid-reveal-backup.log 2>&1
 ```
 
-Restore one into a scratch database before trusting it. A backup you have
-never restored is a guess.
+The script reads `/opt/grid-reveal/.env` itself, because cron starts with
+almost no environment and would otherwise fail on the first variable it needs.
+
+### Checking it works
+
+Run it by hand once, and read the log rather than assuming silence is success:
+
+```bash
+sudo /opt/grid-reveal/backup.sh
+aws s3 ls "s3://$R2_BUCKET/backups/" --endpoint-url "$R2_ENDPOINT"
+```
+
+Then restore into a scratch database — this is the only step that proves
+anything:
+
+```bash
+aws s3 cp "s3://$R2_BUCKET/backups/<file>.sql.gz" /tmp/ --endpoint-url "$R2_ENDPOINT"
+sudo -u postgres createdb restore_check           # on the database VM
+gunzip -c /tmp/<file>.sql.gz | psql "postgres://griduser:<password>@10.0.0.<db>:5432/restore_check"
+psql "postgres://griduser:<password>@10.0.0.<db>:5432/restore_check" \
+  -c '\dt' -c 'select count(*) from screens;' -c 'select count(*) from pictures;'
+sudo -u postgres dropdb restore_check
+```
+
+The dump is taken with `--no-owner --no-privileges`, so it restores as
+`griduser` without needing the roles to match.
+
+A backup you have never restored is a guess. Note also what is *not* in it:
+pictures live in R2 (or on local disk), and the dump holds only the rows that
+point at them.
 
 ## Rollback
 
