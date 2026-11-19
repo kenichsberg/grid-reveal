@@ -1,0 +1,18 @@
+# Runs the backup nightly.
+#
+# Preferred over a crontab entry for three reasons: the environment comes from
+# the same EnvironmentFile the service uses, failures land in the journal where
+# `journalctl -u grid-reveal-backup` finds them, and Persistent=true catches up
+# a run the machine slept through — cron simply skips it and says nothing.
+
+[Unit]
+Description=Nightly Grid Reveal database backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+# Spreads load away from the exact minute every other cron job also picked.
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

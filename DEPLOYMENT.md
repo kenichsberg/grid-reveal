@@ -101,7 +101,20 @@ decode spike an image upload causes, which `apps/api/src/images.rs` caps at
 128 MB. Separating them means neither can starve the other, and a runaway query
 cannot take the API down with it.
 
-On the database VM:
+On the database VM, `deploy/bootstrap-db.sh` does everything in this section —
+packages, role, database, tuning, `pg_hba.conf`, `iptables`, swap:
+
+```bash
+curl -fLO https://raw.githubusercontent.com/kenichsberg/grid-reveal/v0.1.2/deploy/bootstrap-db.sh
+chmod +x bootstrap-db.sh
+sudo ./bootstrap-db.sh 10.0.0.<api>
+```
+
+It prompts for the password, is safe to re-run, and prints the `DATABASE_URL`
+to use. The rest of this section is what it does, which is worth reading once:
+a script you cannot audit is no better than the undocumented host it replaces.
+
+By hand instead:
 
 ```bash
 sudo apt install -y postgresql
@@ -182,6 +195,23 @@ Leaving `R2_ENDPOINT` empty falls back to local disk storage. That is for
 development only — it ties your pictures to one free-tier instance's lifetime.
 
 ## 5. Install the API
+
+`deploy/bootstrap-api.sh` does everything in sections 5 and 6, plus swap and the
+backup timer, on a host that has nothing on it yet. Create
+`/opt/grid-reveal/.env` first — the script configures around that file and will
+not invent it:
+
+```bash
+sudo mkdir -p /opt/grid-reveal
+sudo -e /opt/grid-reveal/.env     # from .env.example
+curl -fLO https://raw.githubusercontent.com/kenichsberg/grid-reveal/v0.1.2/deploy/bootstrap-api.sh
+chmod +x bootstrap-api.sh
+sudo ./bootstrap-api.sh grid-reveal-api.<domain>
+```
+
+It is idempotent, and it ends by telling you what is still missing — the two
+things that are not on the host are the Oracle security list and the DNS
+record. The rest of this section is what it does.
 
 The binary is built by CI and attached to a release, so the VM needs neither a
 Rust toolchain nor a clone of this repository. It could not build it anyway:
@@ -425,31 +455,33 @@ sudo apt install -y postgresql-client awscli
 ```
 
 `pg_dump` must be at least the server's major version, and the script uses the
-`aws` CLI against R2's S3 endpoint. Configure it for the `root` crontab, since
-that is what will run it:
+`aws` CLI against R2's S3 endpoint. It needs no `aws configure`: the CLI reads
+its credentials from the environment, and the script exports them from the R2
+values already in `/opt/grid-reveal/.env`. That file stays the only place those
+keys live — `aws configure` would put a second copy under `/root/.aws`, free to
+drift from the first and easy to forget on a rebuild.
+
+Schedule it with the timer:
 
 ```bash
-sudo aws configure set aws_access_key_id "<R2_ACCESS_KEY_ID>"
-sudo aws configure set aws_secret_access_key "<R2_SECRET_ACCESS_KEY>"
-sudo aws configure set region auto
+sudo systemctl enable --now grid-reveal-backup.timer
+systemctl list-timers grid-reveal-backup
 ```
 
-Then schedule it:
-
-```bash
-sudo crontab -e
-# 15 3 * * * /opt/grid-reveal/backup.sh >> /var/log/grid-reveal-backup.log 2>&1
-```
-
-The script reads `/opt/grid-reveal/.env` itself, because cron starts with
-almost no environment and would otherwise fail on the first variable it needs.
+A `crontab` entry would work too, but cron starts with almost no environment,
+discards output to a log nobody reads, and silently skips a run the machine
+slept through. The timer takes its environment from the same `EnvironmentFile`
+the API uses, logs to the journal, and `Persistent=true` catches up a missed
+run on the next boot.
 
 ### Checking it works
 
-Run it by hand once, and read the log rather than assuming silence is success:
+Run it through systemd once — that exercises what the schedule will, which
+running the script directly does not:
 
 ```bash
-sudo /opt/grid-reveal/backup.sh
+sudo systemctl start grid-reveal-backup
+journalctl -u grid-reveal-backup -n 20 --no-pager
 aws s3 ls "s3://$R2_BUCKET/backups/" --endpoint-url "$R2_ENDPOINT"
 ```
 

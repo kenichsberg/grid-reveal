@@ -1,0 +1,36 @@
+# Nightly database backup. Started by grid-reveal-backup.timer.
+#
+# Install to /etc/systemd/system/, then:
+#   sudo systemctl enable --now grid-reveal-backup.timer
+#
+# Run it on demand with `systemctl start grid-reveal-backup`, which exercises
+# exactly what the timer will.
+
+[Unit]
+Description=Grid Reveal database backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+
+# The same file the API reads. systemd parses it literally, which is why the
+# script prefers this over sourcing it as shell.
+EnvironmentFile=/opt/grid-reveal/.env
+ExecStart=/opt/grid-reveal/backup.sh
+
+# Runs as root: pg_dump reaches the database over the network and the dump is
+# written to a private temporary directory, not to /opt/grid-reveal.
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grid-reveal-backup

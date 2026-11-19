@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # Nightly database backup to object storage.
 #
-# Install as a cron entry on the API host:
-#   15 3 * * * /opt/grid-reveal/backup.sh >> /var/log/grid-reveal-backup.log 2>&1
+# Scheduled by grid-reveal-backup.timer; see deploy/ for both units. Run it by
+# hand with `systemctl start grid-reveal-backup`, or directly for a quick check.
 #
 # A backup you have never restored is a guess. Restore one into a scratch
 # database before trusting this.
 set -euo pipefail
 
-# cron starts with almost no environment, so the configuration is read from the
-# same file the service uses rather than inherited. Sourcing it means a value
-# containing $, backticks or quotes is interpreted by the shell where systemd
-# would take it literally: keep these values plain.
+# Normally systemd supplies the environment from this same file, via
+# EnvironmentFile in grid-reveal-backup.service. Sourcing is the fallback for a
+# run by hand, and deliberately not the usual path: the shell interprets $,
+# backticks and quotes in a value where systemd takes it literally, so the two
+# readings of one file can disagree. Keep these values plain either way.
 ENV_FILE="${ENV_FILE:-/opt/grid-reveal/.env}"
-if [ -f "$ENV_FILE" ]; then
+if [ -z "${DATABASE_URL:-}" ] && [ -f "$ENV_FILE" ]; then
   set -a
   # shellcheck disable=SC1090
   . "$ENV_FILE"
@@ -22,6 +23,13 @@ fi
 
 : "${DATABASE_URL:?DATABASE_URL must be set}"
 : "${R2_BUCKET:?R2_BUCKET must be set}"
+
+# The AWS CLI reads credentials from the environment, so the R2 keys already in
+# .env are enough. `aws configure` would write a second copy under /root/.aws:
+# another place for them to live, drift, and be forgotten on a rebuild.
+export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID must be set}"
+export AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY must be set}"
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}"
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 tmp="$(mktemp -d)"
