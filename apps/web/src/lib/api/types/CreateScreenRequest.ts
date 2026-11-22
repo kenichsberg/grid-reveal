@@ -6,7 +6,8 @@ export type CreateScreenRequest = { title: string, picture_id: string, target_to
  */
 cols: number | null, 
 /**
- * The active period. All three may be omitted, leaving the screen open
- * indefinitely, which is how every screen behaved before windows existed.
+ * The active period. Both dates are required: a screen without one never
+ * ends, never archives itself, and never becomes read-only. The browser
+ * pre-fills the start with the administrator's own day.
  */
-starts_on: string | null, ends_on: string | null, auto_archive_days: number | null, };
+starts_on: string, ends_on: string, auto_archive_days: number | null, };

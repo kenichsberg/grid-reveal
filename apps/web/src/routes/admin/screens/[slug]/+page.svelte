@@ -9,7 +9,7 @@
     ScreenDetail,
     UserSummary
   } from '$lib/api/types';
-  import { formatMinutes } from '$lib/format';
+  import { formatMinutes, today } from '$lib/format';
 
   const slug = $derived(page.params.slug!);
 
@@ -51,6 +51,9 @@
   // Clone
   let cloneTitle = $state('');
   let clonePictureId = $state('');
+  /** A clone is a new period rather than a copy, and every screen needs one. */
+  let cloneStartsOn = $state(today());
+  let cloneEndsOn = $state('');
   let cloning = $state(false);
 
   // Delete
@@ -86,11 +89,13 @@
       cols = detail.cols;
       rows = detail.rows;
       unitMinutes = detail.unit_minutes;
-      startsOn = detail.starts_on ?? '';
-      endsOn = detail.ends_on ?? '';
+      startsOn = detail.starts_on;
+      endsOn = detail.ends_on;
       autoArchiveDays = detail.auto_archive_days;
       cloneTitle = '';
-      clonePictureId = detail.picture_url ? '' : '';
+      clonePictureId = '';
+      cloneStartsOn = today();
+      cloneEndsOn = '';
 
       const [memberList, userList, pictureList] = await Promise.all([
         api.listMembers(slug),
@@ -234,31 +239,41 @@
     }
   }
 
-  const periodInvalid = $derived(startsOn !== '' && endsOn !== '' && endsOn < startsOn);
+  const cloneReady = $derived(
+    cloneTitle.trim() !== '' &&
+      clonePictureId !== '' &&
+      cloneStartsOn !== '' &&
+      cloneEndsOn !== '' &&
+      cloneEndsOn >= cloneStartsOn
+  );
+
+  const periodMissing = $derived(startsOn === '' || endsOn === '');
+  const periodInvalid = $derived(!periodMissing && endsOn < startsOn);
 
   const periodChanged = $derived(
     screen !== null &&
-      ((startsOn || null) !== screen.starts_on ||
-        (endsOn || null) !== screen.ends_on ||
-        (endsOn ? autoArchiveDays : null) !== screen.auto_archive_days)
+      (startsOn !== screen.starts_on ||
+        endsOn !== screen.ends_on ||
+        autoArchiveDays !== screen.auto_archive_days)
   );
 
   async function savePeriod(event: SubmitEvent) {
     event.preventDefault();
-    if (periodInvalid || savingPeriod) return;
+    if (periodMissing || periodInvalid || savingPeriod) return;
     savingPeriod = true;
     try {
-      // Sent whole: a null bound inside the window clears that bound, whereas
-      // omitting the window entirely would leave the period alone.
+      // Sent whole: the window replaces the stored period. Omitting it
+      // entirely is what leaves the period alone, which is how the other forms
+      // on this page save without restating the dates.
       screen = await api.updateScreen(slug, {
         title: null,
         cols: null,
         rows: null,
         unit_minutes: null,
         window: {
-          starts_on: startsOn || null,
-          ends_on: endsOn || null,
-          auto_archive_days: endsOn ? autoArchiveDays : null
+          starts_on: startsOn,
+          ends_on: endsOn,
+          auto_archive_days: autoArchiveDays
         },
         progress_title: null,
         entry_noun: null
@@ -273,15 +288,15 @@
 
   async function clone(event: SubmitEvent) {
     event.preventDefault();
-    if (!cloneTitle.trim() || !clonePictureId) return;
+    if (!cloneTitle.trim() || !clonePictureId || !cloneReady) return;
     cloning = true;
     try {
       const created = await api.cloneScreen(slug, {
         title: cloneTitle.trim(),
         picture_id: clonePictureId,
-        // A clone is a new period, so it starts without one until set.
-        starts_on: null,
-        ends_on: null,
+        // A clone is a new period rather than a copy of the source's.
+        starts_on: cloneStartsOn,
+        ends_on: cloneEndsOn,
         auto_archive_days: null
       });
       goto(`/admin/screens/${created.slug}`);
@@ -510,7 +525,7 @@
       <h2>Clone</h2>
       <p class="muted small">
         Copies the grid, members, and goals into a fresh board with nothing
-        revealed. A new title and picture are required.
+        revealed. A new title, a picture, and a period of its own are required.
       </p>
       <form onsubmit={clone}>
         <div class="field">
@@ -532,11 +547,23 @@
             <img class="clone-preview" src={pictureUrl(chosen.url)} alt="" />
           {/if}
         {/if}
-        <button
-          class="btn btn-sm btn-primary"
-          type="submit"
-          disabled={cloning || !cloneTitle.trim() || !clonePictureId}
-        >
+        <div class="pair">
+          <div class="field">
+            <label for="clone-starts-on">Starts</label>
+            <input id="clone-starts-on" type="date" bind:value={cloneStartsOn} required />
+          </div>
+          <div class="field">
+            <label for="clone-ends-on">Ends</label>
+            <input
+              id="clone-ends-on"
+              type="date"
+              bind:value={cloneEndsOn}
+              min={cloneStartsOn || undefined}
+              required
+            />
+          </div>
+        </div>
+        <button class="btn btn-sm btn-primary" type="submit" disabled={cloning || !cloneReady}>
           {cloning ? 'Cloning…' : 'Clone screen'}
         </button>
       </form>
@@ -547,52 +574,58 @@
       <p class="muted small">
         Progress can be logged only between these dates, and only for dates
         inside them. Once the period ends the screen becomes read-only, keeping
-        its board and celebration. Leave both blank to keep it open
-        indefinitely.
+        its board and celebration. Both dates are required; to reopen a closed
+        screen, move its end date.
       </p>
 
       <form class="stack" onsubmit={savePeriod}>
         <div class="pair">
           <div class="field">
             <label for="starts-on">Starts</label>
-            <input id="starts-on" type="date" bind:value={startsOn} />
+            <input id="starts-on" type="date" bind:value={startsOn} required />
           </div>
           <div class="field">
             <label for="ends-on">Ends</label>
-            <input id="ends-on" type="date" bind:value={endsOn} min={startsOn || undefined} />
+            <input
+              id="ends-on"
+              type="date"
+              bind:value={endsOn}
+              min={startsOn || undefined}
+              required
+            />
           </div>
         </div>
 
         {#if periodInvalid}
           <p class="error" role="alert">The end date cannot fall before the start date.</p>
+        {:else if periodMissing}
+          <p class="error" role="alert">A screen needs both a start date and an end date.</p>
         {/if}
 
-        {#if endsOn}
-          <div class="field">
-            <label for="auto-archive">Archive automatically after</label>
-            <div class="row">
-              <input
-                id="auto-archive"
-                type="number"
-                min="0"
-                placeholder="never"
-                value={autoArchiveDays ?? ''}
-                oninput={(e) => {
-                  const raw = (e.currentTarget as HTMLInputElement).value;
-                  const next = Number(raw);
-                  autoArchiveDays = raw !== '' && Number.isFinite(next) && next >= 0 ? next : null;
-                }}
-              />
-              <span class="muted small">days past the end date</span>
-            </div>
+        <div class="field">
+          <label for="auto-archive">Archive automatically after</label>
+          <div class="row">
+            <input
+              id="auto-archive"
+              type="number"
+              min="0"
+              placeholder="never"
+              value={autoArchiveDays ?? ''}
+              oninput={(e) => {
+                const raw = (e.currentTarget as HTMLInputElement).value;
+                const next = Number(raw);
+                autoArchiveDays = raw !== '' && Number.isFinite(next) && next >= 0 ? next : null;
+              }}
+            />
+            <span class="muted small">days past the end date</span>
           </div>
-        {/if}
+        </div>
 
         <div class="row">
           <button
             class="btn btn-sm btn-primary"
             type="submit"
-            disabled={!periodChanged || periodInvalid || savingPeriod}
+            disabled={!periodChanged || periodMissing || periodInvalid || savingPeriod}
           >
             {savingPeriod ? 'Saving…' : 'Save period'}
           </button>

@@ -8,7 +8,12 @@ import type { Phase } from "./Phase";
  * ones they are not a member of; the personal screen list stays
  * member-scoped for everyone.
  */
-export type AdminScreenEntry = { slug: string, title: string, picture_url: string, archived: boolean, phase: Phase, ends_on: string | null, total_minutes: number, revealed_count: number, total_tiles: number, 
+export type AdminScreenEntry = { slug: string, title: string, picture_url: string, archived: boolean, phase: Phase, 
+/**
+ * Carried so a list can say when an upcoming screen opens, not merely
+ * that it has not started.
+ */
+starts_on: string, ends_on: string, total_minutes: number, revealed_count: number, total_tiles: number, 
 /**
  * Whether the viewing administrator participates in this screen.
  */

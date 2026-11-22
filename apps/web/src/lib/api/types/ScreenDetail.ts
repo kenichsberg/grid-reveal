@@ -20,7 +20,7 @@ archived: boolean,
  * distinguishes a screen whose period has not opened from one whose
  * period has closed.
  */
-phase: Phase, starts_on: string | null, ends_on: string | null, auto_archive_days: number | null, 
+phase: Phase, starts_on: string, ends_on: string, auto_archive_days: number | null, 
 /**
  * Heading above the progress gauge; `null` means the client's default.
  */

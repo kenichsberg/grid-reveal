@@ -4,11 +4,12 @@
  * The active period an administrator sets on a screen.
  *
  * Carried whole on update rather than as three loose fields, so that a
- * request can distinguish "leave the window alone" (the field is absent) from
- * "clear this bound" (the field is present and null). Create and clone have
- * no such ambiguity to resolve and take the three fields inline.
+ * request can still distinguish "leave the period alone" (the field is
+ * absent) from "replace it" (the field is present). What it can no longer
+ * express is "clear this bound": both dates are required, so a window missing
+ * one is a 400 that names it. Create and clone take the three fields inline.
  */
-export type ScreenWindow = { starts_on: string | null, ends_on: string | null, 
+export type ScreenWindow = { starts_on: string, ends_on: string, 
 /**
  * Days after `ends_on` before the screen archives itself; `null` never.
  */

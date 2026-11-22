@@ -27,6 +27,21 @@ Each screen holds a fixed random permutation of its tile indices. Because the
 board is a function of a sum, concurrent submissions cannot race, and editing
 or deleting an entry rewinds the board correctly for free.
 
+## Every screen has a period
+
+A screen is a stretch of time with a picture at the end of it, so `starts_on`
+and `ends_on` are NOT NULL and have no "open indefinitely" case:
+
+```
+today < starts_on   upcoming  visible, read-only
+today in [a, b]     active    the only phase that accepts writes
+today > ends_on     ended     read-only, board and celebration intact
+```
+
+The start date is pre-filled in the browser with the administrator's own day,
+never the server's — see below for why those differ. The retention term that
+archives a screen after its period is still optional; the period itself is not.
+
 ## Whose day it is
 
 Dates here are plain calendar dates, never instants, so something has to decide

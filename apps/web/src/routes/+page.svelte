@@ -5,16 +5,6 @@
   import { formatMinutes, percent } from '$lib/format';
   import { timelineLabel } from '$lib/screen';
 
-  /**
-   * The period phrase for a card, or nothing for an open screen.
-   *
-   * An active screen with no end date has nothing worth a badge; everything
-   * else — upcoming, ending, ended, archived — does.
-   */
-  function phaseBadge(screen: ScreenSummary): string | null {
-    return timelineLabel({ phase: screen.phase, starts_on: null, ends_on: screen.ends_on });
-  }
-
   let screens = $state<ScreenList | null>(null);
   let error = $state('');
 
@@ -83,7 +73,7 @@
         <!-- The cover fades out as the board is revealed, so the card itself
              shows progress the same way the board does. -->
         <div class="cover" style={`opacity: ${1 - pct / 100}`}></div>
-        {#if phaseBadge(screen)}<span class="badge">{phaseBadge(screen)}</span>{/if}
+        <span class="badge">{timelineLabel(screen)}</span>
       </div>
       <div class="meta">
         <strong>{screen.title}</strong>

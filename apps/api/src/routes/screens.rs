@@ -135,25 +135,18 @@ fn validate_unit(unit_minutes: i32) -> AppResult<()> {
 /// The same rules the table's CHECK constraints enforce, stated here so the
 /// administrator gets a sentence rather than a constraint violation.
 fn validate_window(
-    starts_on: Option<NaiveDate>,
-    ends_on: Option<NaiveDate>,
+    starts_on: NaiveDate,
+    ends_on: NaiveDate,
     auto_archive_days: Option<i32>,
 ) -> AppResult<()> {
-    if let (Some(starts_on), Some(ends_on)) = (starts_on, ends_on) {
-        if ends_on < starts_on {
-            return Err(AppError::bad_request(
-                "the end date cannot fall before the start date",
-            ));
-        }
+    if ends_on < starts_on {
+        return Err(AppError::bad_request(
+            "the end date cannot fall before the start date",
+        ));
     }
     if auto_archive_days.is_some_and(|days| days < 0) {
         return Err(AppError::bad_request(
             "the auto-archive term cannot be negative",
-        ));
-    }
-    if auto_archive_days.is_some() && ends_on.is_none() {
-        return Err(AppError::bad_request(
-            "an auto-archive term needs an end date to count from",
         ));
     }
     Ok(())
@@ -191,6 +184,7 @@ async fn to_summary(
         picture_url: state.storage.public_url(&picture.storage_key),
         archived: screen.is_archived_on(today),
         phase: screen.phase(today).into(),
+        starts_on: screen.starts_on,
         ends_on: screen.ends_on,
         total_minutes,
         revealed_count,
@@ -259,6 +253,7 @@ async fn directory(
             picture_url: summary.picture_url,
             archived: summary.archived,
             phase: summary.phase,
+            starts_on: summary.starts_on,
             ends_on: summary.ends_on,
             total_minutes: summary.total_minutes,
             revealed_count: summary.revealed_count,
@@ -865,30 +860,19 @@ mod tests {
     }
 
     #[test]
-    fn a_window_may_be_absent_entirely() {
-        assert!(validate_window(None, None, None).is_ok());
-    }
-
-    #[test]
     fn the_end_date_may_not_precede_the_start() {
-        assert!(validate_window(Some(date("2026-01-10")), Some(date("2026-01-09")), None).is_err());
-        assert!(validate_window(Some(date("2026-01-10")), Some(date("2026-01-10")), None).is_ok());
-        assert!(validate_window(Some(date("2026-01-10")), Some(date("2026-01-11")), None).is_ok());
+        assert!(validate_window(date("2026-01-10"), date("2026-01-09"), None).is_err());
+        assert!(validate_window(date("2026-01-10"), date("2026-01-10"), None).is_ok());
+        assert!(validate_window(date("2026-01-10"), date("2026-01-11"), None).is_ok());
     }
 
+    /// A term with nothing to count from used to be the fourth case here. It
+    /// is now unrepresentable: there is always an end date to count from.
     #[test]
-    fn one_bound_alone_is_a_valid_window() {
-        assert!(validate_window(Some(date("2026-01-10")), None, None).is_ok());
-        assert!(validate_window(None, Some(date("2026-01-10")), None).is_ok());
-    }
-
-    #[test]
-    fn an_auto_archive_term_must_be_non_negative_and_have_an_end_to_count_from() {
-        assert!(validate_window(None, Some(date("2026-01-20")), Some(-1)).is_err());
-        assert!(validate_window(None, Some(date("2026-01-20")), Some(0)).is_ok());
-        assert!(validate_window(None, Some(date("2026-01-20")), Some(15)).is_ok());
-        // Nothing to count from, so the term could never fire.
-        assert!(validate_window(None, None, Some(15)).is_err());
+    fn an_auto_archive_term_must_be_non_negative() {
+        assert!(validate_window(date("2026-01-10"), date("2026-01-20"), Some(-1)).is_err());
+        assert!(validate_window(date("2026-01-10"), date("2026-01-20"), Some(0)).is_ok());
+        assert!(validate_window(date("2026-01-10"), date("2026-01-20"), Some(15)).is_ok());
     }
 
     #[test]

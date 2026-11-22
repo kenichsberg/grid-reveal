@@ -23,8 +23,8 @@ const DEFAULT_ENTRY_NOUN = 'entry';
 /** The fields these helpers read; keeps them usable from the list page too. */
 type Lifecycle = {
   phase: Phase;
-  starts_on: string | null;
-  ends_on: string | null;
+  starts_on: string;
+  ends_on: string;
 };
 
 /**
@@ -87,19 +87,19 @@ export function entryNoun(screen: Pick<ScreenDetail, 'entry_noun'>): string {
 }
 
 /**
- * A short phrase for the screen's period, or `null` when there is nothing to
- * say — an active screen with no window configured is simply open.
+ * A short phrase for the screen's period. Every screen has one, so every phase
+ * has a date to name.
  */
-export function timelineLabel(screen: Lifecycle): string | null {
+export function timelineLabel(screen: Lifecycle): string {
   switch (screen.phase) {
     case 'archived':
       return 'Archived';
     case 'ended':
-      return screen.ends_on ? `Ended ${formatDayMonth(screen.ends_on)}` : 'Ended';
+      return `Ended ${formatDayMonth(screen.ends_on)}`;
     case 'upcoming':
-      return screen.starts_on ? `Starts ${formatDayMonth(screen.starts_on)}` : 'Not started';
+      return `Starts ${formatDayMonth(screen.starts_on)}`;
     case 'active':
-      return screen.ends_on ? `Ends ${formatDayMonth(screen.ends_on)}` : null;
+      return `Ends ${formatDayMonth(screen.ends_on)}`;
   }
 }
 
@@ -108,20 +108,14 @@ export function timelineLabel(screen: Lifecycle): string | null {
  *
  * Dates rather than {@link timelineLabel}'s phrase, because this sits as a
  * subtitle and is read as "what stretch of time is this board about" — not as
- * "what happens next". `null` when the screen has no window at all, in which
- * case the line is not rendered rather than rendered empty.
+ * "what happens next".
  */
-export function periodLabel(screen: Lifecycle): string | null {
-  const from = screen.starts_on ? formatDayMonth(screen.starts_on) : null;
-  const to = screen.ends_on ? formatDayMonth(screen.ends_on) : null;
+export function periodLabel(screen: Lifecycle): string {
+  const span = `${formatDayMonth(screen.starts_on)} – ${formatDayMonth(screen.ends_on)}`;
 
-  const span =
-    from && to ? `${from} – ${to}` : from ? `From ${from}` : to ? `Until ${to}` : null;
-
-  // An archived screen says so even when it never had a window: that is the
-  // one phase a bare pair of dates would not convey.
-  if (screen.phase === 'archived') return span ? `${span} · Archived` : 'Archived';
-  return span;
+  // An archived screen says so: that is the one phase a bare pair of dates
+  // would not convey.
+  return screen.phase === 'archived' ? `${span} · Archived` : span;
 }
 
 /**
@@ -134,9 +128,7 @@ export function blockedReason(screen: Lifecycle): string | null {
     case 'active':
       return null;
     case 'upcoming':
-      return screen.starts_on
-        ? `Logging opens ${formatDayMonth(screen.starts_on)}.`
-        : 'This screen has not started yet.';
+      return `Logging opens ${formatDayMonth(screen.starts_on)}.`;
     case 'ended':
       return 'This period has ended, so nothing further can be logged.';
     case 'archived':

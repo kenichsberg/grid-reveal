@@ -169,16 +169,17 @@ impl From<ScreenPhase> for Phase {
 /// The active period an administrator sets on a screen.
 ///
 /// Carried whole on update rather than as three loose fields, so that a
-/// request can distinguish "leave the window alone" (the field is absent) from
-/// "clear this bound" (the field is present and null). Create and clone have
-/// no such ambiguity to resolve and take the three fields inline.
-#[derive(Debug, Default, Deserialize, TS)]
+/// request can still distinguish "leave the period alone" (the field is
+/// absent) from "replace it" (the field is present). What it can no longer
+/// express is "clear this bound": both dates are required, so a window missing
+/// one is a 400 that names it. Create and clone take the three fields inline.
+#[derive(Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct ScreenWindow {
-    #[ts(type = "string | null")]
-    pub starts_on: Option<NaiveDate>,
-    #[ts(type = "string | null")]
-    pub ends_on: Option<NaiveDate>,
+    #[ts(type = "string")]
+    pub starts_on: NaiveDate,
+    #[ts(type = "string")]
+    pub ends_on: NaiveDate,
     /// Days after `ends_on` before the screen archives itself; `null` never.
     pub auto_archive_days: Option<i32>,
 }
@@ -194,12 +195,13 @@ pub struct CreateScreenRequest {
     pub unit_minutes: i32,
     /// Optional override from the creation preview.
     pub cols: Option<i32>,
-    /// The active period. All three may be omitted, leaving the screen open
-    /// indefinitely, which is how every screen behaved before windows existed.
-    #[ts(type = "string | null")]
-    pub starts_on: Option<NaiveDate>,
-    #[ts(type = "string | null")]
-    pub ends_on: Option<NaiveDate>,
+    /// The active period. Both dates are required: a screen without one never
+    /// ends, never archives itself, and never becomes read-only. The browser
+    /// pre-fills the start with the administrator's own day.
+    #[ts(type = "string")]
+    pub starts_on: NaiveDate,
+    #[ts(type = "string")]
+    pub ends_on: NaiveDate,
     pub auto_archive_days: Option<i32>,
 }
 
@@ -211,8 +213,12 @@ pub struct ScreenSummary {
     pub picture_url: String,
     pub archived: bool,
     pub phase: Phase,
-    #[ts(type = "string | null")]
-    pub ends_on: Option<NaiveDate>,
+    /// Carried so a list can say when an upcoming screen opens, not merely
+    /// that it has not started.
+    #[ts(type = "string")]
+    pub starts_on: NaiveDate,
+    #[ts(type = "string")]
+    pub ends_on: NaiveDate,
     #[ts(type = "number")]
     pub total_minutes: i64,
     pub revealed_count: i32,
@@ -232,8 +238,12 @@ pub struct AdminScreenEntry {
     pub picture_url: String,
     pub archived: bool,
     pub phase: Phase,
-    #[ts(type = "string | null")]
-    pub ends_on: Option<NaiveDate>,
+    /// Carried so a list can say when an upcoming screen opens, not merely
+    /// that it has not started.
+    #[ts(type = "string")]
+    pub starts_on: NaiveDate,
+    #[ts(type = "string")]
+    pub ends_on: NaiveDate,
     #[ts(type = "number")]
     pub total_minutes: i64,
     pub revealed_count: i32,
@@ -281,10 +291,10 @@ pub struct ScreenDetail {
     /// distinguishes a screen whose period has not opened from one whose
     /// period has closed.
     pub phase: Phase,
-    #[ts(type = "string | null")]
-    pub starts_on: Option<NaiveDate>,
-    #[ts(type = "string | null")]
-    pub ends_on: Option<NaiveDate>,
+    #[ts(type = "string")]
+    pub starts_on: NaiveDate,
+    #[ts(type = "string")]
+    pub ends_on: NaiveDate,
     pub auto_archive_days: Option<i32>,
     /// Heading above the progress gauge; `null` means the client's default.
     pub progress_title: Option<String>,
@@ -322,11 +332,12 @@ pub struct CloneScreenRequest {
     #[ts(type = "string")]
     pub picture_id: Uuid,
     /// A clone is a new period rather than a copy, so it gets its own window
-    /// rather than inheriting the original's.
-    #[ts(type = "string | null")]
-    pub starts_on: Option<NaiveDate>,
-    #[ts(type = "string | null")]
-    pub ends_on: Option<NaiveDate>,
+    /// rather than inheriting the original's — and, being a screen, it must
+    /// have one.
+    #[ts(type = "string")]
+    pub starts_on: NaiveDate,
+    #[ts(type = "string")]
+    pub ends_on: NaiveDate,
     pub auto_archive_days: Option<i32>,
 }
 

@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { api, pictureUrl } from '$lib/api/client';
   import type { GeometryPreview, PictureSummary } from '$lib/api/types';
-  import { formatMinutes } from '$lib/format';
+  import { formatMinutes, today } from '$lib/format';
 
   /** Days of read-only visibility after a period ends, before it retires. */
   const DEFAULT_AUTO_ARCHIVE_DAYS = 15;
@@ -16,8 +16,13 @@
   /** Null means "let the solver choose"; a number pins the column count. */
   let cols = $state<number | null>(null);
 
-  /** The active period. Blank dates leave the screen open indefinitely. */
-  let startsOn = $state('');
+  /**
+   * The active period, which every screen has. The start is pre-filled with
+   * the administrator's own day — taken from the browser, since the server's
+   * day is UTC and would be a day behind for anyone creating a screen late in
+   * the evening. The end is the one date they have to decide.
+   */
+  let startsOn = $state(today());
   let endsOn = $state('');
   /** Blank means the screen never archives itself. */
   let autoArchiveDays = $state<number | null>(DEFAULT_AUTO_ARCHIVE_DAYS);
@@ -30,10 +35,15 @@
   let error = $state('');
 
   const targetMinutes = $derived(Math.max(1, Math.round(targetHours * 60)));
-  const windowInvalid = $derived(startsOn !== '' && endsOn !== '' && endsOn < startsOn);
+  const windowMissing = $derived(startsOn === '' || endsOn === '');
+  const windowInvalid = $derived(!windowMissing && endsOn < startsOn);
 
   const ready = $derived(
-    title.trim() !== '' && selected !== null && preview !== null && !windowInvalid
+    title.trim() !== '' &&
+      selected !== null &&
+      preview !== null &&
+      !windowMissing &&
+      !windowInvalid
   );
 
   const snapped = $derived(
@@ -128,10 +138,9 @@
         unit_minutes: unitMinutes,
         // null means "let the solver choose the columns".
         cols,
-        starts_on: startsOn || null,
-        ends_on: endsOn || null,
-        // An auto-archive term needs an end date to count from.
-        auto_archive_days: endsOn ? autoArchiveDays : null
+        starts_on: startsOn,
+        ends_on: endsOn,
+        auto_archive_days: autoArchiveDays
       });
       goto(`/s/${screen.slug}`);
     } catch (e) {
@@ -295,18 +304,18 @@
     <section class="card">
       <h2>Period</h2>
       <p class="muted small">
-        Members can log progress only between these dates. Leave them blank to
-        keep the screen open indefinitely.
+        Members can log progress only between these dates. Both are required:
+        a screen is a stretch of time with a picture at the end of it.
       </p>
 
       <div class="pair">
         <div class="field">
           <label for="starts-on">Starts</label>
-          <input id="starts-on" type="date" bind:value={startsOn} />
+          <input id="starts-on" type="date" bind:value={startsOn} required />
         </div>
         <div class="field">
           <label for="ends-on">Ends</label>
-          <input id="ends-on" type="date" bind:value={endsOn} min={startsOn || undefined} />
+          <input id="ends-on" type="date" bind:value={endsOn} min={startsOn || undefined} required />
         </div>
       </div>
 
@@ -314,35 +323,33 @@
         <p class="error" role="alert">The end date cannot fall before the start date.</p>
       {/if}
 
-      {#if endsOn}
-        <div class="field">
-          <label for="auto-archive">Archive automatically after</label>
-          <div class="row">
-            <input
-              id="auto-archive"
-              type="number"
-              min="0"
-              placeholder="never"
-              value={autoArchiveDays ?? ''}
-              oninput={(e) => {
-                const raw = (e.currentTarget as HTMLInputElement).value;
-                const next = Number(raw);
-                autoArchiveDays = raw !== '' && Number.isFinite(next) && next >= 0 ? next : null;
-              }}
-            />
-            <span class="muted small">days past the end date</span>
-          </div>
-          <p class="muted small">
-            {#if autoArchiveDays === null}
-              The screen stays in the active list, read-only, until you archive it.
-            {:else}
-              Read-only for {autoArchiveDays}
-              {autoArchiveDays === 1 ? 'day' : 'days'} after the period ends, then it
-              moves to the archived list on its own.
-            {/if}
-          </p>
+      <div class="field">
+        <label for="auto-archive">Archive automatically after</label>
+        <div class="row">
+          <input
+            id="auto-archive"
+            type="number"
+            min="0"
+            placeholder="never"
+            value={autoArchiveDays ?? ''}
+            oninput={(e) => {
+              const raw = (e.currentTarget as HTMLInputElement).value;
+              const next = Number(raw);
+              autoArchiveDays = raw !== '' && Number.isFinite(next) && next >= 0 ? next : null;
+            }}
+          />
+          <span class="muted small">days past the end date</span>
         </div>
-      {/if}
+        <p class="muted small">
+          {#if autoArchiveDays === null}
+            The screen stays in the active list, read-only, until you archive it.
+          {:else}
+            Read-only for {autoArchiveDays}
+            {autoArchiveDays === 1 ? 'day' : 'days'} after the period ends, then it
+            moves to the archived list on its own.
+          {/if}
+        </p>
+      </div>
     </section>
 
     <div class="actions">

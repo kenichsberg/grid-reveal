@@ -3,6 +3,7 @@
 export type CloneScreenRequest = { title: string, picture_id: string, 
 /**
  * A clone is a new period rather than a copy, so it gets its own window
- * rather than inheriting the original's.
+ * rather than inheriting the original's — and, being a screen, it must
+ * have one.
  */
-starts_on: string | null, ends_on: string | null, auto_archive_days: number | null, };
+starts_on: string, ends_on: string, auto_archive_days: number | null, };
