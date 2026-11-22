@@ -138,4 +138,5 @@ See [DEPLOYMENT.md](DEPLOYMENT.md). Two things gate everything else: a
 registered domain (the session cookie model depends on it) and an Oracle
 Always Free A1 instance (capacity is often unavailable).
 
-Specs and design live in `openspec/changes/grid-reveal-app/`.
+Specs live in `openspec/specs/`; the changes that produced them are in
+`openspec/changes/archive/`.

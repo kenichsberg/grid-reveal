@@ -113,7 +113,7 @@
 - [x] 11.3 Implement cover tile drawing as flat gray cells with the border drawn inside each cell so revealed tiles leave no trace
 - [x] 11.4 Implement resize handling that rescales picture and canvas together and keeps them aligned
 - [x] 11.5 Ensure no redraw occurs while the board is static
-- [ ] 11.6 Benchmark rendering and animation with a grid of at least 12,000 tiles, and fall back to dirty-rectangle redraws if full-canvas redraws miss frame budget
+- [x] 11.6 Benchmark rendering and animation with a grid of at least 12,000 tiles, and fall back to dirty-rectangle redraws if full-canvas redraws miss frame budget
 - [x] 11.7 Implement the screen header showing the title and participant count, and the footer showing total logged time and progress
 
 ## 12. Entry Submission and Reveal Animation
@@ -153,14 +153,14 @@
 
 ## 16. Deployment
 
-- [ ] 16.1 Register the domain and point the web and API subdomains at Cloudflare
-- [ ] 16.2 Provision the Oracle Ampere A1 instance, expecting repeated capacity failures, and document the fallback to an alternative VPS
-- [ ] 16.3 Provision PostgreSQL, choosing between Neon and an instance on the VM, and record the decision
-- [ ] 16.4 Provision the R2 bucket and credentials
+- [x] 16.1 Register the domain and point the web and API subdomains at Cloudflare
+- [x] 16.2 Provision the Oracle Ampere A1 instance, expecting repeated capacity failures, and document the fallback to an alternative VPS
+- [x] 16.3 Provision PostgreSQL, choosing between Neon and an instance on the VM, and record the decision
+- [x] 16.4 Provision the R2 bucket and credentials
 - [x] 16.5 Install and configure Caddy for TLS termination in front of the axum service, and configure the Cloudflare proxy
 - [x] 16.6 Create the systemd unit for the API with restart-on-failure and environment loaded from the deployed `.env`
 - [x] 16.7 Configure the Cloudflare Pages project with `apps/web` as the build root and the API base URL as a build variable
-- [ ] 16.8 Verify the end-to-end cookie flow across the web and API subdomains before considering deployment complete
+- [x] 16.8 Verify the end-to-end cookie flow across the web and API subdomains before considering deployment complete
 - [x] 16.9 Set up a nightly `pg_dump` to R2 and verify a restore
 
 ## 17. Screen period and board tab shell
