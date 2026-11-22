@@ -1,15 +1,16 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { api, pictureUrl } from '$lib/api/client';
+  import { api, inviteUrl, pictureUrl } from '$lib/api/client';
   import type {
     MemberSummary,
+    InviteSummary,
     PictureSummary,
     RemovalImpact,
     ScreenDetail,
     UserSummary
   } from '$lib/api/types';
-  import { formatMinutes, today } from '$lib/format';
+  import { formatDayMonth, formatInstantDay, formatMinutes, today } from '$lib/format';
 
   const slug = $derived(page.params.slug!);
 
@@ -49,6 +50,13 @@
   let deleteTheirEntries = $state(false);
 
   // Clone
+  let invites = $state<InviteSummary[]>([]);
+  let inviteLabel = $state('');
+  let generating = $state(false);
+  /** The token just generated, so its link is shown once without hunting. */
+  let freshToken = $state('');
+  let copied = $state('');
+
   let cloneTitle = $state('');
   let clonePictureId = $state('');
   /** A clone is a new period rather than a copy, and every screen needs one. */
@@ -97,14 +105,16 @@
       cloneStartsOn = today();
       cloneEndsOn = '';
 
-      const [memberList, userList, pictureList] = await Promise.all([
+      const [memberList, userList, pictureList, inviteList] = await Promise.all([
         api.listMembers(slug),
         api.listUsers(),
-        api.listPictures()
+        api.listPictures(),
+        api.listInvites(slug)
       ]);
       members = memberList;
       users = userList;
       pictures = pictureList;
+      invites = inviteList;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not load this screen.';
     }
@@ -123,6 +133,48 @@
   function fail(e: unknown, fallback: string) {
     error = e instanceof Error ? e.message : fallback;
     notice = '';
+  }
+
+  const openInvites = $derived(invites.filter((invite) => invite.open));
+  const spentInvites = $derived(invites.filter((invite) => !invite.open));
+
+  async function generateInvite(event: SubmitEvent) {
+    event.preventDefault();
+    if (generating) return;
+    generating = true;
+    try {
+      const created = await api.createInvite(slug, { label: inviteLabel.trim() || null });
+      freshToken = created.token;
+      inviteLabel = '';
+      invites = await api.listInvites(slug);
+      report('Invite link created.');
+    } catch (e) {
+      fail(e, 'Could not create an invite.');
+    } finally {
+      generating = false;
+    }
+  }
+
+  async function copyInvite(token: string) {
+    try {
+      await navigator.clipboard.writeText(inviteUrl(token));
+      copied = token;
+    } catch {
+      // Clipboard access can be refused; the link is on screen either way.
+      copied = '';
+      fail(new Error('Could not copy. Select the link and copy it by hand.'), '');
+    }
+  }
+
+  async function revokeInvite(invite: InviteSummary) {
+    try {
+      await api.revokeInvite(slug, invite.id);
+      if (freshToken === invite.token) freshToken = '';
+      invites = await api.listInvites(slug);
+      report('Invite withdrawn.');
+    } catch (e) {
+      fail(e, 'Could not withdraw that invite.');
+    }
   }
 
   async function saveTitle(event: SubmitEvent) {
@@ -522,6 +574,83 @@
     </section>
 
     <section class="card">
+      <h2>Invite links</h2>
+      <p class="muted small">
+        A link joins one person to this screen. They choose their own username
+        and password, so you never handle either. Each link works once, and
+        every link for this screen stops working after
+        {formatDayMonth(screen.ends_on)} — move the end date to extend them.
+      </p>
+
+      <form class="row" onsubmit={generateInvite}>
+        <input
+          type="text"
+          bind:value={inviteLabel}
+          maxlength="80"
+          placeholder="Who is it for? (optional)"
+          aria-label="Who the invite is for"
+        />
+        <button class="btn btn-sm btn-primary" type="submit" disabled={generating}>
+          {generating ? 'Creating…' : 'New link'}
+        </button>
+      </form>
+
+      {#if freshToken}
+        <div class="fresh">
+          <code>{inviteUrl(freshToken)}</code>
+          <button class="btn btn-sm" onclick={() => copyInvite(freshToken)}>
+            {copied === freshToken ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      {/if}
+
+      {#if openInvites.length === 0}
+        <p class="muted small">No links are waiting to be used.</p>
+      {:else}
+        <ul class="invites">
+          {#each openInvites as invite (invite.id)}
+            <li>
+              <span>
+                {invite.label ?? 'Unlabelled'}
+                <span class="muted small">· {formatInstantDay(invite.created_at)}</span>
+              </span>
+              <span class="row">
+                <button class="btn btn-sm" onclick={() => copyInvite(invite.token)}>
+                  {copied === invite.token ? 'Copied' : 'Copy link'}
+                </button>
+                <button class="btn btn-sm btn-danger" onclick={() => revokeInvite(invite)}>
+                  Withdraw
+                </button>
+              </span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      {#if spentInvites.length > 0}
+        <h3 class="small">Already used or closed</h3>
+        <ul class="invites muted small">
+          {#each spentInvites as invite (invite.id)}
+            <li>
+              <span>{invite.label ?? 'Unlabelled'}</span>
+              <span>
+                {#if invite.accepted_by}
+                  joined as {invite.accepted_by}
+                {:else if invite.accepted_at}
+                  used, by an account since deleted
+                {:else if invite.revoked_at}
+                  withdrawn
+                {:else}
+                  expired with the period
+                {/if}
+              </span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+
+    <section class="card">
       <h2>Clone</h2>
       <p class="muted small">
         Copies the grid, members, and goals into a fresh board with nothing
@@ -733,6 +862,19 @@
   .check input { width: auto; margin-top: 0.3rem; }
 
   .add { margin-top: 0.5rem; }
+
+  .invites { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+  .invites li { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+  .fresh {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.6rem 0;
+    padding: 0.5rem 0.6rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .fresh code { overflow-wrap: anywhere; font-size: 0.85rem; }
 
   .clone-preview {
     display: block;

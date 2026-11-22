@@ -10,12 +10,15 @@ import { PUBLIC_API_BASE_URL } from '$env/static/public';
 import { today } from '$lib/format';
 
 import type {
+  AcceptInviteRequest,
+  AcceptInviteResponse,
   AddMemberRequest,
   AdminScreenEntry,
   ChangePasswordRequest,
   CloneScreenRequest,
   CreateEntryRequest,
   CreateGoalRequest,
+  CreateInviteRequest,
   CreateScreenRequest,
   CreateUserRequest,
   CurrentUser,
@@ -23,6 +26,8 @@ import type {
   EntrySummary,
   GeometryPreview,
   GoalSummary,
+  InvitePeek,
+  InviteSummary,
   LoginRequest,
   MemberSummary,
   PictureSummary,
@@ -241,5 +246,33 @@ export const api = {
   listGoals: (slug: string) => request<GoalSummary[]>(`/screens/${slug}/goals`),
   createGoal: (slug: string, body: CreateGoalRequest) =>
     request<GoalSummary>(`/screens/${slug}/goals`, { method: 'POST', body }),
-  deleteGoal: (id: string) => request<unknown>(`/goals/${id}`, { method: 'DELETE' })
+  deleteGoal: (id: string) => request<unknown>(`/goals/${id}`, { method: 'DELETE' }),
+
+  // Invites
+  listInvites: (slug: string) => request<InviteSummary[]>(`/screens/${slug}/invites`),
+  createInvite: (slug: string, body: CreateInviteRequest) =>
+    request<InviteSummary>(`/screens/${slug}/invites`, { method: 'POST', body }),
+  revokeInvite: (slug: string, id: string) =>
+    request<unknown>(`/screens/${slug}/invites/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Public, and `quiet` on purpose: a visitor with no session is the normal
+   * case here, so a 401 must not bounce them to a login page they cannot use.
+   */
+  peekInvite: (token: string) => request<InvitePeek>(`/invites/${token}`, { quiet: true }),
+  acceptInvite: (token: string, body: AcceptInviteRequest) =>
+    request<AcceptInviteResponse>(`/invites/${token}/accept`, {
+      method: 'POST',
+      body,
+      quiet: true
+    })
 };
+
+/**
+ * The link an administrator sends. Built here rather than returned by the API,
+ * which has no idea what origin serves this app — in production they are
+ * different hosts entirely.
+ */
+export function inviteUrl(token: string): string {
+  return `${location.origin}/join/${token}`;
+}

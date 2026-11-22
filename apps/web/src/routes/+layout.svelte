@@ -7,15 +7,19 @@
 
   let { children } = $props();
 
-  const PUBLIC_ROUTES = ['/login'];
+  /**
+   * Pages reachable without a session. A predicate rather than a list: an
+   * invite's path carries its token, so it cannot be matched by equality.
+   */
+  const isPublicPath = (path: string) => path === '/login' || path.startsWith('/join/');
 
   // The board occupies the whole viewport, so it gets no application chrome.
   const isBoard = $derived(page.url.pathname.startsWith('/s/'));
-  const isPublic = $derived(PUBLIC_ROUTES.includes(page.url.pathname));
+  const isPublic = $derived(isPublicPath(page.url.pathname));
 
   setUnauthorizedHandler(() => {
     auth.clear();
-    if (!PUBLIC_ROUTES.includes(location.pathname)) {
+    if (!isPublicPath(location.pathname)) {
       goto(`/login?next=${encodeURIComponent(location.pathname + location.search)}`);
     }
   });

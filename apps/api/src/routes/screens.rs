@@ -22,7 +22,7 @@ use crate::geometry;
 use crate::models::{Picture, Screen};
 use crate::state::AppState;
 
-const SLUG_ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyz23456789";
+pub(crate) const SLUG_ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyz23456789";
 const SLUG_LEN: usize = 10;
 const MAX_TITLE_LEN: usize = 120;
 /// Mirrors the `screens_progress_title_shape` CHECK.

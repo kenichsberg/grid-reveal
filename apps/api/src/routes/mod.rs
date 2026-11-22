@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod entries;
 pub mod goals;
+pub mod invites;
 pub mod pictures;
 pub mod screens;
 pub mod users;
@@ -29,6 +30,7 @@ pub fn app(state: AppState) -> Router {
         .merge(screens::router())
         .merge(entries::router())
         .merge(goals::router())
+        .merge(invites::router())
         // Generous enough for a 10 MB image plus multipart framing; the image
         // pipeline enforces the real limit with a clearer error.
         .layer(RequestBodyLimitLayer::new(images::MAX_UPLOAD_BYTES + 1024 * 1024))

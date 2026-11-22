@@ -476,3 +476,75 @@ pub struct GoalSummary {
     /// Populated for administrators only; `None` for everyone else.
     pub author_username: Option<String>,
 }
+
+// ---------------------------------------------------------------------------
+// Invites
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct CreateInviteRequest {
+    /// Who the link is meant for, for the administrator's own benefit. Blank
+    /// clears it, the same as every other label in this API.
+    pub label: Option<String>,
+}
+
+/// An invite as its administrator sees it.
+///
+/// Carries the token, because an administrator who closed the tab needs to be
+/// able to copy the link again. The invited person never sees this shape.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct InviteSummary {
+    #[ts(type = "string")]
+    pub id: Uuid,
+    pub token: String,
+    pub label: Option<String>,
+    #[ts(type = "string")]
+    pub created_at: DateTime<Utc>,
+    /// Derived per request from the screen's phase, so it is the same answer
+    /// the invited person would get if they opened the link right now.
+    pub open: bool,
+    #[ts(type = "string | null")]
+    pub accepted_at: Option<DateTime<Utc>>,
+    /// The account that accepted, if it still exists.
+    pub accepted_by: Option<String>,
+    #[ts(type = "string | null")]
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+/// What the holder of a token is told before they commit to anything.
+///
+/// Deliberately thin: the screen's name and picture are what someone needs to
+/// know what they are joining, and the slug is not among them — that arrives
+/// with membership.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct InvitePeek {
+    pub screen_title: String,
+    pub picture_url: String,
+    pub open: bool,
+    /// Why it is closed, phrased for the person holding the link. `None` while
+    /// the invite is open.
+    pub closed_reason: Option<String>,
+    /// Whether the caller is already signed in, so the page can offer to join
+    /// with that account instead of asking for new credentials.
+    pub viewer_is_signed_in: bool,
+}
+
+/// Credentials are absent when the caller already has a session: an invite
+/// then joins the account they are signed in as, rather than making a second.
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct AcceptInviteRequest {
+    pub username: Option<String>,
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct AcceptInviteResponse {
+    pub user: CurrentUser,
+    /// Where to go next, which the caller could not have known before.
+    pub slug: String,
+}

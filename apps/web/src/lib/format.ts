@@ -78,3 +78,21 @@ export function formatDayMonth(iso: string): string {
     ...(y === new Date().getFullYear() ? {} : { year: 'numeric' })
   });
 }
+
+/**
+ * The calendar day of an instant, in the reader's own timezone.
+ *
+ * Almost everything this API returns is a plain date, which is why
+ * {@link formatDayMonth} can split on `-`. A few things are genuine
+ * timestamps — when an invite was created, say — and splitting one that way
+ * would leave the time stuck to the day.
+ */
+export function formatInstantDay(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  return at.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    ...(at.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' })
+  });
+}

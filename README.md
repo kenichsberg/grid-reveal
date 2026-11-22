@@ -27,6 +27,25 @@ Each screen holds a fixed random permutation of its tile indices. Because the
 board is a function of a sum, concurrent submissions cannot race, and editing
 or deleting an entry rewinds the board correctly for free.
 
+## How someone joins
+
+There is no signup form. An administrator generates an invite link for one
+screen:
+
+```
+https://<web-host>/join/<24-character token>
+```
+
+Opening it shows the screen's title and picture. Accepting it creates the
+account, joins it to that screen, and signs the person in, all in one
+transaction — so a username that turns out to be taken costs them nothing and
+the link still works. Each link admits one person, and the administrator never
+sees the password.
+
+An invite has no expiry date of its own. It is open while the screen is
+upcoming or active, and dead once the period ends — which also means extending
+a screen's end date revives its unused links.
+
 ## Every screen has a period
 
 A screen is a stretch of time with a picture at the end of it, so `starts_on`
@@ -109,7 +128,7 @@ After changing `apps/api/src/dto.rs`, regenerate the TypeScript contract:
 ## Testing
 
 ```bash
-cd apps/api && cargo test     # 83 tests
+cd apps/api && cargo test     # 156 tests
 cd apps/web && npm run check  # svelte-check
 ```
 

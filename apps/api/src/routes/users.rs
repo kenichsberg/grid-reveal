@@ -35,7 +35,7 @@ fn to_summary(user: User) -> UserSummary {
     }
 }
 
-fn validate_username(username: &str) -> AppResult<String> {
+pub(crate) fn validate_username(username: &str) -> AppResult<String> {
     let trimmed = username.trim();
     let len = trimmed.chars().count();
     if !(MIN_USERNAME_LEN..=MAX_USERNAME_LEN).contains(&len) {

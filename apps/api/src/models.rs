@@ -168,6 +168,41 @@ pub struct Goal {
     pub position: i32,
 }
 
+/// A one-time link that joins its holder to one screen.
+///
+/// Its lifetime is not its own: an invite is open while it is unspent,
+/// unwithdrawn, and its screen is still upcoming or active. There is no stored
+/// expiry, for the same reason the board is not stored — a second copy of a
+/// fact can only disagree with the first.
+#[derive(Debug, Clone, FromRow)]
+pub struct ScreenInvite {
+    pub id: Uuid,
+    pub screen_id: Uuid,
+    pub token: String,
+    /// Who the administrator meant it for. Never shown to the invited person.
+    pub label: Option<String>,
+    pub created_by: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    /// Null for an unaccepted invite, and also for one whose member was later
+    /// deleted — the acceptance stays recorded either way.
+    pub accepted_by: Option<Uuid>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl ScreenInvite {
+    /// Whether this invite still admits someone.
+    ///
+    /// Takes the phase rather than the screen and a date, so the caller has
+    /// already decided whose day it is — which is the one thing this must not
+    /// decide for itself.
+    pub fn is_open(&self, phase: ScreenPhase) -> bool {
+        self.accepted_at.is_none()
+            && self.revoked_at.is_none()
+            && matches!(phase, ScreenPhase::Upcoming | ScreenPhase::Active)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,5 +292,64 @@ mod tests {
         assert!(screen.accepts_writes(date("2026-01-15")));
         assert!(!screen.accepts_writes(date("2026-01-21")));
         assert!(!screen.accepts_writes(date("2026-02-05")));
+    }
+
+
+    fn invite() -> ScreenInvite {
+        ScreenInvite {
+            id: Uuid::nil(),
+            screen_id: Uuid::nil(),
+            token: "token".into(),
+            label: None,
+            created_by: Uuid::nil(),
+            created_at: Utc::now(),
+            accepted_at: None,
+            accepted_by: None,
+            revoked_at: None,
+        }
+    }
+
+    #[test]
+    fn an_invite_is_open_only_while_its_screen_admits_writes_or_is_still_to_come() {
+        let invite = invite();
+        assert!(invite.is_open(ScreenPhase::Upcoming));
+        assert!(invite.is_open(ScreenPhase::Active));
+        assert!(!invite.is_open(ScreenPhase::Ended));
+        assert!(!invite.is_open(ScreenPhase::Archived));
+    }
+
+    #[test]
+    fn a_spent_or_withdrawn_invite_is_closed_in_every_phase() {
+        let accepted = ScreenInvite {
+            accepted_at: Some(Utc::now()),
+            accepted_by: Some(Uuid::nil()),
+            ..invite()
+        };
+        let revoked = ScreenInvite {
+            revoked_at: Some(Utc::now()),
+            ..invite()
+        };
+
+        for phase in [
+            ScreenPhase::Upcoming,
+            ScreenPhase::Active,
+            ScreenPhase::Ended,
+            ScreenPhase::Archived,
+        ] {
+            assert!(!accepted.is_open(phase));
+            assert!(!revoked.is_open(phase));
+        }
+    }
+
+    /// The acceptance outlives the account: deleting a member nulls
+    /// `accepted_by` and must not make the invite look reusable.
+    #[test]
+    fn an_acceptance_whose_member_was_deleted_is_still_spent() {
+        let orphaned = ScreenInvite {
+            accepted_at: Some(Utc::now()),
+            accepted_by: None,
+            ..invite()
+        };
+        assert!(!orphaned.is_open(ScreenPhase::Active));
     }
 }

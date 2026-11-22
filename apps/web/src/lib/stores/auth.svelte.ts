@@ -35,6 +35,12 @@ class AuthStore {
     this.user = await api.login({ username, password });
   }
 
+  /** Adopts the session an invite established, without a second round trip. */
+  adopt(user: CurrentUser) {
+    this.user = user;
+    this.loading = false;
+  }
+
   async logout() {
     try {
       await api.logout();
