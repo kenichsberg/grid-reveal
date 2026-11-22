@@ -7,13 +7,14 @@ pub mod pictures;
 pub mod screens;
 pub mod users;
 
-use axum::http::{header, HeaderValue, Method};
+use axum::http::{header, HeaderName, HeaderValue, Method};
 use axum::routing::get;
 use axum::{Json, Router};
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
+use crate::auth::extract::CLIENT_DATE_HEADER;
 use crate::images;
 use crate::state::AppState;
 
@@ -62,7 +63,14 @@ fn build_cors(state: &AppState) -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([header::CONTENT_TYPE, header::ACCEPT])
+        // Without the client-date header here, the browser never sends it:
+        // preflight fails outright rather than the header going quietly
+        // missing, so every cross-origin request breaks at once.
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            HeaderName::from_static(CLIENT_DATE_HEADER),
+        ])
 }
 
 async fn health() -> Json<serde_json::Value> {

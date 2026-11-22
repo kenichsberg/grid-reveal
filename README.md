@@ -27,6 +27,25 @@ Each screen holds a fixed random permutation of its tile indices. Because the
 board is a function of a sum, concurrent submissions cannot race, and editing
 or deleting an entry rewinds the board correctly for free.
 
+## Whose day it is
+
+Dates here are plain calendar dates, never instants, so something has to decide
+which day a request happens on. The caller does, by sending its own date:
+
+```
+X-Client-Date: 2026-11-19
+```
+
+The server's clock is UTC, which is a different day from the member's for a few
+hours either side of their local midnight. Without the header, a session logged
+at 00:30 east of UTC is refused as a future entry, and a screen whose period
+opens that day reports that it has not started.
+
+The header is optional. A request without one is judged by the server's UTC
+date, which is what the API did before the header existed. A date further than
+one day from the server's own is ignored rather than rejected, so a wrong device
+clock degrades to UTC instead of moving a screen's deadline.
+
 ## Running locally
 
 ### With Docker (nothing to install)

@@ -7,6 +7,8 @@
  */
 import { PUBLIC_API_BASE_URL } from '$env/static/public';
 
+import { today } from '$lib/format';
+
 import type {
   AddMemberRequest,
   AdminScreenEntry,
@@ -71,13 +73,28 @@ type RequestOptions = {
   quiet?: boolean;
 };
 
+/**
+ * The caller's own calendar day.
+ *
+ * The server's clock is UTC, which is a different day from ours for a few
+ * hours either side of local midnight. Sending our date is what stops a
+ * session logged at 00:30 from being refused as a future entry, and a screen
+ * whose period opens today from reporting that it has not started. The server
+ * ignores anything more than a day from its own date, so a wrong device clock
+ * only ever falls back to UTC.
+ */
+const CLIENT_DATE_HEADER = 'X-Client-Date';
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, quiet = false } = options;
 
   const init: RequestInit = {
     method,
     credentials: 'include',
-    headers: body === undefined ? {} : { 'Content-Type': 'application/json' }
+    headers: {
+      [CLIENT_DATE_HEADER]: today(),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
+    }
   };
   if (body !== undefined) init.body = JSON.stringify(body);
 
@@ -119,7 +136,12 @@ async function upload<T>(path: string, file: File): Promise<T> {
 
   let response: Response;
   try {
-    response = await fetch(`${BASE}${path}`, { method: 'POST', credentials: 'include', body: form });
+    response = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { [CLIENT_DATE_HEADER]: today() },
+      body: form
+    });
   } catch {
     throw new ApiError(0, 'network', 'Could not reach the server.');
   }

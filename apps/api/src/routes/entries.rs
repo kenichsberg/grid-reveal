@@ -3,11 +3,11 @@
 use axum::extract::{Path, State};
 use axum::routing::get;
 use axum::{Json, Router};
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use uuid::Uuid;
 
 use crate::access;
-use crate::auth::extract::AuthUser;
+use crate::auth::extract::{AuthUser, ClientToday};
 use crate::board;
 use crate::dto::{CreateEntryRequest, EntrySummary, SubmitEntryResponse, UpdateEntryRequest};
 use crate::error::{AppError, AppResult};
@@ -67,8 +67,11 @@ fn to_minutes(hours: i32, minutes: i32) -> AppResult<i32> {
 ///
 /// A plain date, never an instant: there is no sub-day resolution here, so
 /// storing one would only invite timezone bugs.
-fn resolve_date(provided: Option<NaiveDate>) -> AppResult<NaiveDate> {
-    let today = Utc::now().date_naive();
+///
+/// `today` is the caller's day, not the server's. Taking it as an argument is
+/// what lets a member east of UTC log at 00:30 without being told their entry
+/// is in the future — and what makes this function testable at all.
+fn resolve_date(provided: Option<NaiveDate>, today: NaiveDate) -> AppResult<NaiveDate> {
     match provided {
         None => Ok(today),
         Some(date) if date > today => Err(AppError::bad_request(
@@ -117,10 +120,11 @@ async fn list_own(
 async fn create(
     State(state): State<AppState>,
     auth: AuthUser,
+    client_today: ClientToday,
     Path(slug): Path<String>,
     Json(body): Json<CreateEntryRequest>,
 ) -> AppResult<Json<SubmitEntryResponse>> {
-    let today = Utc::now().date_naive();
+    let today = client_today.date();
     let screen = access::screen_for_viewer(&state.db, &slug, &auth.user).await?;
     access::ensure_writable(&screen, today)?;
 
@@ -133,7 +137,7 @@ async fn create(
     }
 
     let minutes = to_minutes(body.hours, body.minutes)?;
-    let occurred_at = resolve_date(body.occurred_at)?;
+    let occurred_at = resolve_date(body.occurred_at, today)?;
     access::ensure_in_window(&screen, occurred_at)?;
     let note = validate_note(body.note)?;
 
@@ -214,14 +218,16 @@ async fn own_entry(state: &AppState, id: Uuid, user_id: Uuid) -> AppResult<(Entr
 async fn update(
     State(state): State<AppState>,
     auth: AuthUser,
+    client_today: ClientToday,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateEntryRequest>,
 ) -> AppResult<Json<EntrySummary>> {
+    let today = client_today.date();
     let (entry, screen) = own_entry(&state, id, auth.user.id).await?;
-    access::ensure_writable(&screen, Utc::now().date_naive())?;
+    access::ensure_writable(&screen, today)?;
 
     let minutes = to_minutes(body.hours, body.minutes)?;
-    let occurred_at = resolve_date(body.occurred_at)?;
+    let occurred_at = resolve_date(body.occurred_at, today)?;
     access::ensure_in_window(&screen, occurred_at)?;
     let note = validate_note(body.note)?;
 
@@ -244,10 +250,11 @@ async fn update(
 async fn destroy(
     State(state): State<AppState>,
     auth: AuthUser,
+    client_today: ClientToday,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
     let (entry, screen) = own_entry(&state, id, auth.user.id).await?;
-    access::ensure_writable(&screen, Utc::now().date_naive())?;
+    access::ensure_writable(&screen, client_today.date())?;
 
     sqlx::query("UPDATE entries SET deleted_at = now() WHERE id = $1")
         .bind(entry.id)
@@ -289,15 +296,27 @@ mod tests {
 
     #[test]
     fn date_defaults_to_today_and_refuses_the_future() {
-        let today = Utc::now().date_naive();
-        assert_eq!(resolve_date(None).unwrap(), today);
-        assert_eq!(resolve_date(Some(today)).unwrap(), today);
+        let today = NaiveDate::from_ymd_opt(2026, 11, 19).unwrap();
+        assert_eq!(resolve_date(None, today).unwrap(), today);
+        assert_eq!(resolve_date(Some(today), today).unwrap(), today);
 
         let yesterday = today.pred_opt().unwrap();
-        assert_eq!(resolve_date(Some(yesterday)).unwrap(), yesterday);
+        assert_eq!(resolve_date(Some(yesterday), today).unwrap(), yesterday);
 
         let tomorrow = today.succ_opt().unwrap();
-        assert!(resolve_date(Some(tomorrow)).is_err());
+        assert!(resolve_date(Some(tomorrow), today).is_err());
+    }
+
+    /// The skew case, stated as a unit test: the caller's day is a day ahead of
+    /// the server's, and an entry dated that day is the present, not the future.
+    #[test]
+    fn the_callers_day_is_what_counts_as_today() {
+        let caller_today = NaiveDate::from_ymd_opt(2026, 11, 20).unwrap();
+        assert_eq!(
+            resolve_date(Some(caller_today), caller_today).unwrap(),
+            caller_today
+        );
+        assert_eq!(resolve_date(None, caller_today).unwrap(), caller_today);
     }
 
     #[test]

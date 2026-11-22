@@ -1,7 +1,7 @@
 //! Screens: creation, access, membership, geometry, and lifecycle.
 
 use axum::extract::{Path, Query, State};
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use rand::seq::SliceRandom;
@@ -10,7 +10,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::access;
-use crate::auth::extract::{AdminUser, AuthUser};
+use crate::auth::extract::{AdminUser, AuthUser, ClientToday};
 use crate::board;
 use crate::dto::{
     AddMemberRequest, AdminScreenEntry, CloneScreenRequest, CreateScreenRequest,
@@ -203,7 +203,11 @@ async fn to_summary(
 // ---------------------------------------------------------------------------
 
 /// Only the caller's own screens, split by archive status.
-async fn list(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<ScreenList>> {
+async fn list(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    client_today: ClientToday,
+) -> AppResult<Json<ScreenList>> {
     let screens = sqlx::query_as::<_, Screen>(
         "SELECT s.* FROM screens s
          JOIN screen_members m ON m.screen_id = s.id
@@ -217,7 +221,7 @@ async fn list(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<S
     // Automatic archiving is derived, not stored, so the split is made here
     // rather than in SQL: a screen whose retention term has expired belongs in
     // the archived section even though nothing wrote `archived_at`.
-    let today = Utc::now().date_naive();
+    let today = client_today.date();
     let mut active = Vec::new();
     let mut archived = Vec::new();
     for screen in &screens {
@@ -239,12 +243,13 @@ async fn list(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<S
 async fn directory(
     State(state): State<AppState>,
     admin: AdminUser,
+    client_today: ClientToday,
 ) -> AppResult<Json<Vec<AdminScreenEntry>>> {
     let screens = sqlx::query_as::<_, Screen>("SELECT * FROM screens ORDER BY created_at DESC")
         .fetch_all(&state.db)
         .await?;
 
-    let today = Utc::now().date_naive();
+    let today = client_today.date();
     let mut out = Vec::with_capacity(screens.len());
     for screen in &screens {
         let summary = to_summary(&state, screen, today).await?;
@@ -268,13 +273,14 @@ async fn directory(
 async fn detail(
     State(state): State<AppState>,
     auth: AuthUser,
+    client_today: ClientToday,
     Path(slug): Path<String>,
 ) -> AppResult<Json<ScreenDetail>> {
     let screen = access::screen_for_viewer(&state.db, &slug, &auth.user).await?;
     let picture = picture_of(&state.db, screen.picture_id).await?;
     let (total_minutes, revealed_count) = access::board_state(&state.db, &screen).await?;
     let participant_count = access::participant_count(&state.db, screen.id).await?;
-    let today = Utc::now().date_naive();
+    let today = client_today.date();
 
     Ok(Json(ScreenDetail {
         slug: screen.slug.clone(),
@@ -343,6 +349,7 @@ async fn geometry_preview(
 async fn create(
     State(state): State<AppState>,
     admin: AdminUser,
+    client_today: ClientToday,
     Json(body): Json<CreateScreenRequest>,
 ) -> AppResult<Json<ScreenDetail>> {
     let title = validate_title(&body.title)?;
@@ -392,7 +399,13 @@ async fn create(
 
     tx.commit().await?;
 
-    detail(State(state), AuthUser { user: admin.user, token: admin.token }, Path(slug)).await
+    detail(
+        State(state),
+        AuthUser { user: admin.user, token: admin.token },
+        client_today,
+        Path(slug),
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -413,6 +426,7 @@ async fn create(
 async fn update(
     State(state): State<AppState>,
     admin: AdminUser,
+    client_today: ClientToday,
     Path(slug): Path<String>,
     Json(body): Json<UpdateScreenRequest>,
 ) -> AppResult<Json<ScreenDetail>> {
@@ -504,7 +518,13 @@ async fn update(
             .await?;
     }
 
-    detail(State(state), AuthUser { user: admin.user, token: admin.token }, Path(slug)).await
+    detail(
+        State(state),
+        AuthUser { user: admin.user, token: admin.token },
+        client_today,
+        Path(slug),
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -657,6 +677,7 @@ async fn remove_member(
 async fn clone_screen(
     State(state): State<AppState>,
     admin: AdminUser,
+    client_today: ClientToday,
     Path(slug): Path<String>,
     Json(body): Json<CloneScreenRequest>,
 ) -> AppResult<Json<ScreenDetail>> {
@@ -727,6 +748,7 @@ async fn clone_screen(
     detail(
         State(state),
         AuthUser { user: admin.user, token: admin.token },
+        client_today,
         Path(new_slug),
     )
     .await

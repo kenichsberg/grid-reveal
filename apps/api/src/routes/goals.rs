@@ -3,11 +3,10 @@
 use axum::extract::{Path, State};
 use axum::routing::get;
 use axum::{Json, Router};
-use chrono::Utc;
 use uuid::Uuid;
 
 use crate::access;
-use crate::auth::extract::AuthUser;
+use crate::auth::extract::{AuthUser, ClientToday};
 use crate::dto::{CreateGoalRequest, GoalSummary};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -74,11 +73,12 @@ async fn list(
 async fn create(
     State(state): State<AppState>,
     auth: AuthUser,
+    client_today: ClientToday,
     Path(slug): Path<String>,
     Json(body): Json<CreateGoalRequest>,
 ) -> AppResult<Json<GoalSummary>> {
     let screen = access::screen_for_viewer(&state.db, &slug, &auth.user).await?;
-    access::ensure_writable(&screen, Utc::now().date_naive())?;
+    access::ensure_writable(&screen, client_today.date())?;
 
     let text = validate_text(&body.text)?;
 
@@ -122,6 +122,7 @@ async fn create(
 async fn destroy(
     State(state): State<AppState>,
     auth: AuthUser,
+    client_today: ClientToday,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
     let row: Option<(Uuid, Uuid)> = sqlx::query_as(
@@ -143,7 +144,7 @@ async fn destroy(
     if !auth.user.is_admin && !access::is_member(&state.db, screen.id, auth.user.id).await? {
         return Err(AppError::NotFound);
     }
-    access::ensure_writable(&screen, Utc::now().date_naive())?;
+    access::ensure_writable(&screen, client_today.date())?;
 
     if created_by != auth.user.id && !auth.user.is_admin {
         return Err(AppError::Forbidden);

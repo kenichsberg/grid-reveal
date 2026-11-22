@@ -40,6 +40,22 @@ jobs:
     # already present.
     container: rust:1.93-bullseye
 
+    # The date-boundary tests drive the real router against a real database.
+    # The job runs in a container, so the service is reached by its name on the
+    # shared network rather than through a published port.
+    services:
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: grid
+          POSTGRES_PASSWORD: grid
+          POSTGRES_DB: grid_reveal
+        options: >-
+          --health-cmd "pg_isready -U grid"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     defaults:
       run:
         working-directory: apps/api
@@ -53,10 +69,16 @@ jobs:
         with:
           workspaces: apps/api
 
-      # No database needed: the suite is unit and serialization tests, and the
-      # code uses sqlx's runtime query API rather than the `query!` macro, so
-      # neither DATABASE_URL nor SQLX_OFFLINE comes into it.
+      # The code uses sqlx's runtime query API rather than the `query!` macro,
+      # so SQLX_OFFLINE never comes into it and no database is needed to
+      # COMPILE. One suite needs one to RUN: the date-boundary tests migrate a
+      # throwaway database and drive the router against it. They skip with a
+      # notice when TEST_DATABASE_URL points at nothing, so the suite still
+      # passes on a machine without a database — which is why the service above
+      # is what keeps them honest here.
       - name: Test
+        env:
+          TEST_DATABASE_URL: postgres://grid:grid@db:5432/grid_reveal
         run: cargo test --locked
 
       # --locked against the committed Cargo.lock: a release binary should be
