@@ -2,7 +2,7 @@
   import { api, pictureUrl } from '$lib/api/client';
   import type { ScreenList, ScreenSummary } from '$lib/api/types';
   import { auth } from '$lib/stores/auth.svelte';
-  import { formatMinutes, percent } from '$lib/format';
+  import { percent } from '$lib/format';
   import { timelineLabel } from '$lib/screen';
 
   let screens = $state<ScreenList | null>(null);
@@ -66,19 +66,32 @@
 
 {#snippet card(screen: ScreenSummary)}
   {@const pct = percent(screen.revealed_count, screen.total_tiles)}
+  <!-- `percent` rounds, so 249 of 250 tiles prints 100% beside a board that is
+       still covered. The figure in the card's mouth is the one place that
+       would read as a finished screen with its picture missing, so it holds at
+       99 until the server sends the picture. -->
+  {@const headline = screen.picture_url ? 100 : Math.min(99, pct)}
   <li>
     <a class="screen" href={`/s/${screen.slug}`}>
       <div class="thumb">
-        <img src={pictureUrl(screen.picture_url)} alt="" loading="lazy" />
-        <!-- The cover fades out as the board is revealed, so the card itself
-             shows progress the same way the board does. -->
-        <div class="cover" style={`opacity: ${1 - pct / 100}`}></div>
+        <!-- The picture arrives only on a finished board; until then the card
+             is a blank tile, because a dimmed photograph is still the
+             photograph and there would be nothing left to uncover. -->
+        {#if screen.picture_url}
+          <img src={pictureUrl(screen.picture_url)} alt="" loading="lazy" />
+        {:else}
+          <span class="pct">{headline}%</span>
+        {/if}
         <span class="badge">{timelineLabel(screen)}</span>
       </div>
       <div class="meta">
         <strong>{screen.title}</strong>
+        <!-- The percentage and the tile count are already the card's largest
+             element, so the one line under the title says who is behind them
+             instead of repeating them. -->
         <span class="muted small">
-          {formatMinutes(screen.total_minutes)} · {screen.revealed_count}/{screen.total_tiles} tiles · {pct}%
+          {screen.participant_count}
+          {screen.participant_count === 1 ? 'participant' : 'participants'}
         </span>
         <div class="bar" aria-hidden="true"><div class="fill" style={`width: ${pct}%`}></div></div>
       </div>
@@ -117,13 +130,20 @@
   }
   .screen:hover { transform: translateY(-2px); border-color: var(--accent); }
 
-  .thumb { position: relative; aspect-ratio: 16 / 10; background: var(--surface-2); }
+  /* The same gray `BoardCanvas` paints covered tiles with, so an unfinished
+     card reads as an unopened board rather than as a failed image. */
+  .thumb { position: relative; aspect-ratio: 16 / 10; background: var(--tile); }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-  .cover {
+  .pct {
     position: absolute;
     inset: 0;
-    background: var(--tile);
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
   }
 
   .badge {

@@ -170,18 +170,25 @@ async fn picture_of(pool: &PgPool, id: Uuid) -> AppResult<Picture> {
         .ok_or(AppError::NotFound)
 }
 
+/// The summary beside its picture URL.
+///
+/// The URL is returned next to the summary rather than inside it because the
+/// two listings answer differently: a member's list discloses the picture only
+/// once the board is finished, while the administrator directory — whose job
+/// is to show which picture a screen uses — always does.
 async fn to_summary(
     state: &AppState,
     screen: &Screen,
     today: NaiveDate,
-) -> AppResult<ScreenSummary> {
+) -> AppResult<(ScreenSummary, String)> {
     let (total_minutes, revealed_count) = access::board_state(&state.db, screen).await?;
     let picture = picture_of(&state.db, screen.picture_id).await?;
+    let participant_count = access::participant_count(&state.db, screen.id).await?;
 
-    Ok(ScreenSummary {
+    let summary = ScreenSummary {
         slug: screen.slug.clone(),
         title: screen.title.clone(),
-        picture_url: state.storage.public_url(&picture.storage_key),
+        picture_url: None,
         archived: screen.is_archived_on(today),
         phase: screen.phase(today).into(),
         starts_on: screen.starts_on,
@@ -189,7 +196,10 @@ async fn to_summary(
         total_minutes,
         revealed_count,
         total_tiles: screen.total_tiles(),
-    })
+        participant_count,
+    };
+
+    Ok((summary, state.storage.public_url(&picture.storage_key)))
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +229,14 @@ async fn list(
     let mut active = Vec::new();
     let mut archived = Vec::new();
     for screen in &screens {
-        let summary = to_summary(&state, screen, today).await?;
+        let (mut summary, picture_url) = to_summary(&state, screen, today).await?;
+
+        // Compared as counts, never as the rounded percentage the card prints:
+        // 249 of 250 tiles rounds to 100% and is still a covered board.
+        if summary.revealed_count >= summary.total_tiles {
+            summary.picture_url = Some(picture_url);
+        }
+
         if screen.is_archived_on(today) {
             archived.push(summary);
         } else {
@@ -246,11 +263,11 @@ async fn directory(
     let today = client_today.date();
     let mut out = Vec::with_capacity(screens.len());
     for screen in &screens {
-        let summary = to_summary(&state, screen, today).await?;
+        let (summary, picture_url) = to_summary(&state, screen, today).await?;
         out.push(AdminScreenEntry {
             slug: summary.slug,
             title: summary.title,
-            picture_url: summary.picture_url,
+            picture_url,
             archived: summary.archived,
             phase: summary.phase,
             starts_on: summary.starts_on,

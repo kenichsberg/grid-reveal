@@ -210,7 +210,14 @@ pub struct CreateScreenRequest {
 pub struct ScreenSummary {
     pub slug: String,
     pub title: String,
-    pub picture_url: String,
+    /// `None` until every tile is revealed.
+    ///
+    /// The list is a lobby, not a board. A card carrying the picture before
+    /// the last tile fell would disclose the very thing the group is
+    /// uncovering, so the URL is withheld rather than merely left unrendered —
+    /// the same reason `ScreenDetail` sends only the revealed prefix of the
+    /// permutation.
+    pub picture_url: Option<String>,
     pub archived: bool,
     pub phase: Phase,
     /// Carried so a list can say when an upcoming screen opens, not merely
@@ -223,6 +230,11 @@ pub struct ScreenSummary {
     pub total_minutes: i64,
     pub revealed_count: i32,
     pub total_tiles: i32,
+    /// How many people are on the screen. The card has room for one fact
+    /// beneath the title, and who is in it says more than a figure the
+    /// percentage above it already gives.
+    #[ts(type = "number")]
+    pub participant_count: i64,
 }
 
 /// One row of the administrator directory.
