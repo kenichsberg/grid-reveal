@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { api, pictureUrl } from '$lib/api/client';
+  import { pageTitle } from '$lib/stores/site.svelte';
   import type { GeometryPreview, PictureSummary } from '$lib/api/types';
   import { formatMinutes, today } from '$lib/format';
 
@@ -150,7 +151,7 @@
   }
 </script>
 
-<svelte:head><title>New screen · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('New screen')}</title></svelte:head>
 
 <main class="container">
   <h1>New screen</h1>

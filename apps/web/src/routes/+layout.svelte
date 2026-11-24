@@ -3,6 +3,7 @@
   import { page } from '$app/state';
   import { setUnauthorizedHandler } from '$lib/api/client';
   import { auth } from '$lib/stores/auth.svelte';
+  import { site } from '$lib/stores/site.svelte';
   import '../app.css';
 
   let { children } = $props();
@@ -25,6 +26,10 @@
   });
 
   auth.hydrate();
+  // Alongside, not after: the name is wanted on the login page too, and
+  // waiting for both means nobody watches the fallback name change into the
+  // configured one.
+  site.hydrate();
 
   $effect(() => {
     if (auth.loading) return;
@@ -39,7 +44,7 @@
   }
 </script>
 
-{#if auth.loading}
+{#if auth.loading || site.loading}
   <div class="boot" role="status">Loading…</div>
 {:else if !auth.isAuthenticated && !isPublic}
   <div class="boot" role="status">Redirecting…</div>
@@ -47,7 +52,7 @@
   {#if !isBoard && !isPublic}
     <header class="nav">
       <div class="nav-inner">
-        <a class="brand" href="/">Grid Reveal</a>
+        <a class="brand" href="/">{site.name}</a>
         <nav class="links">
           <a href="/">Screens</a>
           {#if auth.isAdmin}

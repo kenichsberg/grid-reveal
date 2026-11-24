@@ -36,9 +36,11 @@ import type {
   ScreenDetail,
   ScreenList,
   SetPasswordRequest,
+  SiteSettings,
   SubmitEntryResponse,
   UpdateEntryRequest,
   UpdateScreenRequest,
+  UpdateSettingsRequest,
   UserSummary
 } from './types';
 
@@ -254,6 +256,15 @@ export const api = {
     request<InviteSummary>(`/screens/${slug}/invites`, { method: 'POST', body }),
   revokeInvite: (slug: string, id: string) =>
     request<unknown>(`/screens/${slug}/invites/${id}`, { method: 'DELETE' }),
+
+  // Site
+  /**
+   * Public: the application's name is on the login page, which is the one
+   * page nobody reaches with a session.
+   */
+  settings: () => request<SiteSettings>('/settings', { quiet: true }),
+  updateSettings: (body: UpdateSettingsRequest) =>
+    request<SiteSettings>('/settings', { method: 'PATCH', body }),
 
   /**
    * Public, and `quiet` on purpose: a visitor with no session is the normal

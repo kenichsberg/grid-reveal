@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { auth } from '$lib/stores/auth.svelte';
+  import { pageTitle } from '$lib/stores/site.svelte';
 
   // Administrative pages are also guarded server-side; this only avoids
   // showing a page that would fail every request it makes.
@@ -9,7 +10,7 @@
   });
 </script>
 
-<svelte:head><title>Admin · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('Admin')}</title></svelte:head>
 
 <main class="container">
   <h1>Administration</h1>
@@ -37,6 +38,12 @@
       <a class="card" href="/admin/users">
         <strong>Accounts</strong>
         <span class="muted small">Create accounts and reset passwords.</span>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="/admin/settings">
+        <strong>Site settings</strong>
+        <span class="muted small">What this installation is called.</span>
       </a>
     </li>
   </ul>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, ApiError, pictureUrl } from '$lib/api/client';
+  import { pageTitle } from '$lib/stores/site.svelte';
   import type { PictureSummary } from '$lib/api/types';
 
   let pictures = $state<PictureSummary[] | null>(null);
@@ -74,7 +75,7 @@
   }
 </script>
 
-<svelte:head><title>Pictures · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('Pictures')}</title></svelte:head>
 
 <main class="container">
   <h1>Picture library</h1>

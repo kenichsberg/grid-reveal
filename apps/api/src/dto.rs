@@ -568,3 +568,23 @@ pub struct AcceptInviteResponse {
     /// Where to go next, which the caller could not have known before.
     pub slug: String,
 }
+
+// ---------------------------------------------------------------------------
+// Site
+// ---------------------------------------------------------------------------
+
+/// What this installation calls itself.
+///
+/// Instance-wide rather than per-screen, and readable without a session: the
+/// login and invite pages show the name to people who have not signed in yet.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct SiteSettings {
+    pub app_name: String,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdateSettingsRequest {
+    pub app_name: String,
+}

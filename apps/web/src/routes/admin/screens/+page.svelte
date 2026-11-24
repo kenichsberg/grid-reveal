@@ -8,6 +8,7 @@
    * can administer" are different questions.
    */
   import { api } from '$lib/api/client';
+  import { pageTitle } from '$lib/stores/site.svelte';
   import type { AdminScreenEntry } from '$lib/api/types';
   import { formatMinutes, percent } from '$lib/format';
 
@@ -37,7 +38,7 @@
   const archivedCount = $derived((screens ?? []).filter((s) => s.archived).length);
 </script>
 
-<svelte:head><title>All screens · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('All screens')}</title></svelte:head>
 
 <main class="container">
   <div class="spread head">

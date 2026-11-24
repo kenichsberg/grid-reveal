@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api/client';
+  import { pageTitle } from '$lib/stores/site.svelte';
   import { auth } from '$lib/stores/auth.svelte';
 
   let current = $state('');
@@ -35,7 +36,7 @@
   }
 </script>
 
-<svelte:head><title>Account · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('Account')}</title></svelte:head>
 
 <main class="container narrow">
   <h1>Account</h1>

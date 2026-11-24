@@ -13,6 +13,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, ApiError } from '$lib/api/client';
+  import { pageTitle, site } from '$lib/stores/site.svelte';
   import { auth } from '$lib/stores/auth.svelte';
   import { percent } from '$lib/format';
   import type { InvitePeek } from '$lib/api/types';
@@ -69,11 +70,11 @@
   }
 </script>
 
-<svelte:head><title>Join · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('Join')}</title></svelte:head>
 
 <main class="wrap">
   <div class="card">
-    <h1>Grid Reveal</h1>
+    <h1>{site.name}</h1>
 
     {#if loadError}
       <p class="error" role="alert">{loadError}</p>

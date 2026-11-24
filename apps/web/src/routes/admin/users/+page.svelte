@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api/client';
+  import { pageTitle } from '$lib/stores/site.svelte';
   import type { UserSummary } from '$lib/api/types';
 
   let users = $state<UserSummary[] | null>(null);
@@ -72,7 +73,7 @@
   }
 </script>
 
-<svelte:head><title>Accounts · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('Accounts')}</title></svelte:head>
 
 <main class="container">
   <h1>Accounts</h1>

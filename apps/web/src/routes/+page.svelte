@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, pictureUrl } from '$lib/api/client';
+  import { pageTitle } from '$lib/stores/site.svelte';
   import type { ScreenList, ScreenSummary } from '$lib/api/types';
   import { auth } from '$lib/stores/auth.svelte';
   import { percent } from '$lib/format';
@@ -23,7 +24,7 @@
   );
 </script>
 
-<svelte:head><title>Screens · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('Screens')}</title></svelte:head>
 
 <main class="container">
   <div class="spread head">

@@ -11,6 +11,7 @@
   import { untrack } from 'svelte';
   import { page } from '$app/state';
   import { api, ApiError, pictureUrl } from '$lib/api/client';
+  import { pageTitle } from '$lib/stores/site.svelte';
   import type {
     EntrySummary,
     GoalSummary,
@@ -267,7 +268,7 @@
 </script>
 
 <svelte:head>
-  <title>{screen?.title ?? 'Screen'} · Grid Reveal</title>
+  <title>{pageTitle(screen?.title ?? 'Screen')}</title>
 </svelte:head>
 
 {#snippet tabIcon(item: Tab)}

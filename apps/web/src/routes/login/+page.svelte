@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError } from '$lib/api/client';
+  import { pageTitle, site } from '$lib/stores/site.svelte';
   import { auth } from '$lib/stores/auth.svelte';
 
   let username = $state('');
@@ -32,11 +33,11 @@
   }
 </script>
 
-<svelte:head><title>Sign in · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle('Sign in')}</title></svelte:head>
 
 <main class="wrap">
   <form class="card" onsubmit={submit}>
-    <h1>Grid Reveal</h1>
+    <h1>{site.name}</h1>
     <p class="muted small">Sign in to see your screens.</p>
 
     {#if error}<p class="error" role="alert">{error}</p>{/if}

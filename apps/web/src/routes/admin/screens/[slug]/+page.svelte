@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, inviteUrl, pictureUrl } from '$lib/api/client';
+  import { pageTitle } from '$lib/stores/site.svelte';
   import type {
     MemberSummary,
     InviteSummary,
@@ -388,7 +389,7 @@
   }
 </script>
 
-<svelte:head><title>Manage {screen?.title ?? 'screen'} · Grid Reveal</title></svelte:head>
+<svelte:head><title>{pageTitle(`Manage ${screen?.title ?? 'screen'}`)}</title></svelte:head>
 
 <main class="container">
   {#if error}<p class="error" role="alert">{error}</p>{/if}
