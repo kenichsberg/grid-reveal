@@ -7,7 +7,7 @@
    * member-scoped for everyone. "The screens I am part of" and "every screen I
    * can administer" are different questions.
    */
-  import { api, pictureUrl } from '$lib/api/client';
+  import { api } from '$lib/api/client';
   import type { AdminScreenEntry } from '$lib/api/types';
   import { formatMinutes, percent } from '$lib/format';
 
@@ -74,8 +74,10 @@
       <ul class="list">
         {#each visible as screen (screen.slug)}
           {@const pct = percent(screen.revealed_count, screen.total_tiles)}
+          <!-- No thumbnail: an administrator is a participant too, and a
+               directory of pictures would spoil every board they are on. The
+               picture is for choosing one and for a finished screen. -->
           <li class="card" class:archived={screen.archived}>
-            <img src={pictureUrl(screen.picture_url)} alt="" loading="lazy" />
             <div class="meta">
               <div class="titles">
                 <strong>{screen.title}</strong>
@@ -121,22 +123,13 @@
 
   .list li {
     display: grid;
-    grid-template-columns: 76px 1fr auto;
+    grid-template-columns: 1fr auto;
     align-items: center;
     gap: 0.9rem;
     padding: 0.7rem;
   }
 
   .list li.archived { opacity: 0.68; }
-
-  .list img {
-    width: 76px;
-    height: 56px;
-    object-fit: cover;
-    border-radius: 6px;
-    background: var(--surface-2);
-    display: block;
-  }
 
   .meta { min-width: 0; display: grid; gap: 0.2rem; }
   .titles { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
@@ -161,8 +154,7 @@
   .fill { height: 100%; background: var(--accent); }
 
   @media (max-width: 560px) {
-    .list li { grid-template-columns: 56px 1fr; }
-    .list img { width: 56px; height: 42px; }
-    .actions { grid-column: 1 / -1; justify-content: flex-end; }
+    .list li { grid-template-columns: 1fr; }
+    .actions { justify-content: flex-end; }
   }
 </style>

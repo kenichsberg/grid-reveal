@@ -247,7 +247,6 @@ pub struct ScreenSummary {
 pub struct AdminScreenEntry {
     pub slug: String,
     pub title: String,
-    pub picture_url: String,
     pub archived: bool,
     pub phase: Phase,
     /// Carried so a list can say when an upcoming screen opens, not merely
@@ -527,14 +526,23 @@ pub struct InviteSummary {
 
 /// What the holder of a token is told before they commit to anything.
 ///
-/// Deliberately thin: the screen's name and picture are what someone needs to
-/// know what they are joining, and the slug is not among them — that arrives
-/// with membership.
+/// Deliberately thin, and thinner than it was: the picture is NOT here. A
+/// link forwarded to anyone at all would have shown the whole of what the
+/// group is uncovering, to someone who has not even joined. The name, how far
+/// along the board is, and how many people are on it are enough to know what
+/// is being joined. The slug is not among them either; that arrives with
+/// membership.
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
 pub struct InvitePeek {
     pub screen_title: String,
-    pub picture_url: String,
+    /// What the screen stands at, which is what the picture used to show
+    /// without meaning to: an invitee may know how far along the group is,
+    /// but not what they are uncovering.
+    pub revealed_count: i32,
+    pub total_tiles: i32,
+    #[ts(type = "number")]
+    pub participant_count: i64,
     pub open: bool,
     /// Why it is closed, phrased for the person holding the link. `None` while
     /// the invite is open.

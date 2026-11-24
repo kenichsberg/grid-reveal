@@ -8,7 +8,7 @@ import type { Phase } from "./Phase";
  * ones they are not a member of; the personal screen list stays
  * member-scoped for everyone.
  */
-export type AdminScreenEntry = { slug: string, title: string, picture_url: string, archived: boolean, phase: Phase, 
+export type AdminScreenEntry = { slug: string, title: string, archived: boolean, phase: Phase, 
 /**
  * Carried so a list can say when an upcoming screen opens, not merely
  * that it has not started.

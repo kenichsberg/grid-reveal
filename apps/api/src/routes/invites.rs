@@ -239,16 +239,18 @@ async fn peek(
     let (invite, screen) = by_token(&state.db, &token).await?;
     let phase = screen.phase(client_today.date());
 
-    let picture = sqlx::query_as::<_, crate::models::Picture>(
-        "SELECT * FROM pictures WHERE id = $1",
-    )
-    .bind(screen.picture_id)
-    .fetch_one(&state.db)
-    .await?;
+    // How far along the group is, rather than what they are uncovering. The
+    // picture used to be here, and a link forwarded to anyone at all showed
+    // the whole of it before they had even joined.
+    let (_, revealed_count) = access::board_state(&state.db, &screen).await?;
+    let participant_count = access::participant_count(&state.db, screen.id).await?;
+    let total_tiles = screen.total_tiles();
 
     Ok(Json(InvitePeek {
         screen_title: screen.title,
-        picture_url: state.storage.public_url(&picture.storage_key),
+        revealed_count,
+        total_tiles,
+        participant_count,
         open: invite.is_open(phase),
         closed_reason: closed_reason(&invite, phase),
         viewer_is_signed_in: signed_in(&state, &jar).await?.is_some(),

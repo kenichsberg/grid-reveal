@@ -21,9 +21,19 @@
 - [x] 3.3 Drop the now-unused `formatMinutes` import from the page
 - [x] 3.4 Stop hiding the headline percentage from screen readers: it was `aria-hidden` only because the meta line repeated it, and that line no longer does
 
-## 4. Prove it
+## 4. Take it out of the last two places that served it
 
-- [x] 4.1 Add `apps/api/tests/screen_picture.rs`: a fresh screen's summary carries `picture_url: null`, a finished one carries the URL, and the administrator directory carries it throughout
-- [x] 4.2 Cover the near miss too — one tile short is still short — since that is the case the old fading cover got wrong
-- [x] 4.3 Assert the list reports the participant count, which starts at one: the creating administrator is a participant
-- [x] 4.4 `cargo test` (158) and `npm run check` both clean
+- [x] 4.1 Fold the gate into `to_summary`: the picture is now loaded only when `revealed_count >= total_tiles`, so an unfinished screen's URL is never built and cannot leak by being rendered somewhere nobody thought about
+- [x] 4.2 Drop `picture_url` from `AdminScreenEntry` and the thumbnail column from the directory list — an administrator is a participant too
+- [x] 4.3 Drop `picture_url` from `InvitePeek`; a forwarded link showed the whole picture to someone who had not joined
+- [x] 4.4 Give the peek `revealed_count`, `total_tiles` and `participant_count` instead, from the same `access::` helpers the listings use
+- [x] 4.5 The invitation page shows the covered board and a line naming the participants and the tiles uncovered; no clamp at 99 here, because there is no picture at any percentage for 100% to be mistaken for
+- [x] 4.6 Leave `/admin/pictures` and the clone picker alone: both are choosing a picture, which is the one thing that still needs to see them
+
+## 5. Prove it
+
+- [x] 5.1 Add `apps/api/tests/screen_picture.rs`: a fresh screen's summary carries `picture_url: null` and a finished one carries the URL
+- [x] 5.2 Cover the near miss too — one tile short is still short — since that is the case the old fading cover got wrong
+- [x] 5.3 Assert the list reports the participant count, which starts at one: the creating administrator is a participant
+- [x] 5.4 Assert the directory serves no picture, finished or not, and that a peek serves none either while reporting a participant count that is the screen's own
+- [x] 5.5 `cargo test` (159) and `npm run check` both clean

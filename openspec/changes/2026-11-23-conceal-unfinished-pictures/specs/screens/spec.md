@@ -44,7 +44,12 @@ The system SHALL provide each authenticated user a list of exactly the screens t
 - **WHEN** a user opens their screen list
 - **THEN** each screen reports its participant count, and the card shows it rather than restating the progress figure it already displays
 
-#### Scenario: The administrator directory is unaffected
+#### Scenario: The administrator directory discloses no picture either
 
 - **WHEN** an administrator opens the screen directory
-- **THEN** every entry carries its picture URL whatever its revealed count, since administrators choose the pictures
+- **THEN** no entry carries a picture URL, whatever its revealed count, because an administrator is a participant too and a directory of pictures would spoil every board they are on
+
+#### Scenario: Choosing a picture still shows pictures
+
+- **WHEN** an administrator is choosing a picture — browsing the library, creating a screen, or cloning one
+- **THEN** the pictures are shown, because choosing one is impossible otherwise

@@ -2,8 +2,9 @@
 //!
 //! A card that showed the picture — even dimmed — would disclose the one thing
 //! the application exists to withhold, so `GET /screens` omits the URL until
-//! every tile is revealed. The administrator directory is the exception:
-//! administrators choose the pictures, so there is nothing there to spoil.
+//! every tile is revealed. Nothing else serves one at all: an administrator is
+//! a participant too, so the directory withholds it as well, and the picture
+//! is reached only by choosing one or by finishing a board.
 //!
 //! Needs PostgreSQL. `docker compose up -d db` provides it; the suite skips
 //! with a notice when it is absent.
@@ -198,15 +199,14 @@ async fn the_list_withholds_the_picture_until_every_tile_is_revealed() {
     // participant, not merely an operator, so a new screen has one.
     assert_eq!(row["participant_count"], 1, "{row}");
 
-    // The administrator directory is a different question and keeps its
-    // thumbnails throughout.
+    // The administrator directory carries no picture either, finished or
+    // not: an administrator is a participant, and a wall of thumbnails would
+    // spoil every board they are on.
     let (status, directory) = request(&admin, "GET", "/admin/screens", None).await;
     assert_eq!(status, StatusCode::OK, "{directory}");
     assert!(
-        row_for(&directory, &slug)["picture_url"]
-            .as_str()
-            .is_some_and(|url| url.contains(&storage_key)),
-        "the directory lost its thumbnail: {directory}"
+        !directory.to_string().contains(&storage_key),
+        "the directory served a picture: {directory}"
     );
 
     // Finish the board.
@@ -232,6 +232,15 @@ async fn the_list_withholds_the_picture_until_every_tile_is_revealed() {
             .as_str()
             .is_some_and(|url| url.contains(&storage_key)),
         "a finished board withheld its picture: {row}"
+    );
+
+    // Still not in the directory, even now that the board is done: the one
+    // listing that may show a picture is the member's own.
+    let (status, directory) = request(&admin, "GET", "/admin/screens", None).await;
+    assert_eq!(status, StatusCode::OK, "{directory}");
+    assert!(
+        !directory.to_string().contains(&storage_key),
+        "the directory served a picture: {directory}"
     );
 }
 

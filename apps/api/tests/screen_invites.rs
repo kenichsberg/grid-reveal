@@ -509,6 +509,46 @@ async fn peeking_never_spends_an_invite() {
     assert_eq!(status, StatusCode::OK, "{body}");
 }
 
+/// What a link discloses, and what it must not.
+///
+/// The peek used to carry the picture, which meant a link forwarded to anyone
+/// at all showed the whole of what the group was uncovering, to someone who
+/// had not even joined. It now carries where the board stands instead.
+#[tokio::test]
+async fn a_peek_shows_the_standing_of_the_board_and_never_its_picture() {
+    let Some(pool) = pool().await else { return };
+    let world = world(&pool, today(), today() + Days::days(30)).await;
+    let token = new_invite(&world).await;
+
+    let (status, peeked) = peek(&world, &token).await;
+    assert_eq!(status, StatusCode::OK);
+
+    assert!(
+        peeked.get("picture_url").is_none(),
+        "the invite disclosed a picture: {peeked}"
+    );
+    assert!(
+        !peeked.to_string().contains("/pictures/"),
+        "the invite disclosed a picture: {peeked}"
+    );
+
+    // The screen the harness builds is 2x2 with nothing logged against it,
+    // and it is inserted directly, so it starts with no members at all.
+    assert_eq!(peeked["revealed_count"], 0);
+    assert_eq!(peeked["total_tiles"], 4);
+    assert_eq!(peeked["screen_title"], "Invited");
+    assert_eq!(peeked["participant_count"], 0);
+
+    // And the count is the screen's own, not a constant: accepting this
+    // invite puts someone on it.
+    let (status, body) = accept(&world, &token, &name("p")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, peeked) = peek(&world, &token).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(peeked["participant_count"], 1);
+}
+
 /// 6.9 — an unknown token discloses nothing, from either public endpoint.
 #[tokio::test]
 async fn an_unknown_token_is_a_404_from_both_public_endpoints() {

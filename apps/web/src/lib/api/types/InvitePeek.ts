@@ -3,11 +3,20 @@
 /**
  * What the holder of a token is told before they commit to anything.
  *
- * Deliberately thin: the screen's name and picture are what someone needs to
- * know what they are joining, and the slug is not among them — that arrives
- * with membership.
+ * Deliberately thin, and thinner than it was: the picture is NOT here. A
+ * link forwarded to anyone at all would have shown the whole of what the
+ * group is uncovering, to someone who has not even joined. The name, how far
+ * along the board is, and how many people are on it are enough to know what
+ * is being joined. The slug is not among them either; that arrives with
+ * membership.
  */
-export type InvitePeek = { screen_title: string, picture_url: string, open: boolean, 
+export type InvitePeek = { screen_title: string, 
+/**
+ * What the screen stands at, which is what the picture used to show
+ * without meaning to: an invitee may know how far along the group is,
+ * but not what they are uncovering.
+ */
+revealed_count: number, total_tiles: number, participant_count: number, open: boolean, 
 /**
  * Why it is closed, phrased for the person holding the link. `None` while
  * the invite is open.

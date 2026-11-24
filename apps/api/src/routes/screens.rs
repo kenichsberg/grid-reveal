@@ -170,36 +170,42 @@ async fn picture_of(pool: &PgPool, id: Uuid) -> AppResult<Picture> {
         .ok_or(AppError::NotFound)
 }
 
-/// The summary beside its picture URL.
+/// A screen as a listing sees it.
 ///
-/// The URL is returned next to the summary rather than inside it because the
-/// two listings answer differently: a member's list discloses the picture only
-/// once the board is finished, while the administrator directory — whose job
-/// is to show which picture a screen uses — always does.
+/// The picture is loaded only on a finished board, which is the only listing
+/// that may show one. On any other screen the URL is never built, so it
+/// cannot leak by being rendered somewhere nobody thought about.
 async fn to_summary(
     state: &AppState,
     screen: &Screen,
     today: NaiveDate,
-) -> AppResult<(ScreenSummary, String)> {
+) -> AppResult<ScreenSummary> {
     let (total_minutes, revealed_count) = access::board_state(&state.db, screen).await?;
-    let picture = picture_of(&state.db, screen.picture_id).await?;
     let participant_count = access::participant_count(&state.db, screen.id).await?;
+    let total_tiles = screen.total_tiles();
 
-    let summary = ScreenSummary {
+    // Counts, never the rounded percentage the card prints: 249 of 250 tiles
+    // rounds to 100% and is still a covered board.
+    let picture_url = if revealed_count >= total_tiles {
+        let picture = picture_of(&state.db, screen.picture_id).await?;
+        Some(state.storage.public_url(&picture.storage_key))
+    } else {
+        None
+    };
+
+    Ok(ScreenSummary {
         slug: screen.slug.clone(),
         title: screen.title.clone(),
-        picture_url: None,
+        picture_url,
         archived: screen.is_archived_on(today),
         phase: screen.phase(today).into(),
         starts_on: screen.starts_on,
         ends_on: screen.ends_on,
         total_minutes,
         revealed_count,
-        total_tiles: screen.total_tiles(),
+        total_tiles,
         participant_count,
-    };
-
-    Ok((summary, state.storage.public_url(&picture.storage_key)))
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -229,14 +235,7 @@ async fn list(
     let mut active = Vec::new();
     let mut archived = Vec::new();
     for screen in &screens {
-        let (mut summary, picture_url) = to_summary(&state, screen, today).await?;
-
-        // Compared as counts, never as the rounded percentage the card prints:
-        // 249 of 250 tiles rounds to 100% and is still a covered board.
-        if summary.revealed_count >= summary.total_tiles {
-            summary.picture_url = Some(picture_url);
-        }
-
+        let summary = to_summary(&state, screen, today).await?;
         if screen.is_archived_on(today) {
             archived.push(summary);
         } else {
@@ -263,11 +262,10 @@ async fn directory(
     let today = client_today.date();
     let mut out = Vec::with_capacity(screens.len());
     for screen in &screens {
-        let (summary, picture_url) = to_summary(&state, screen, today).await?;
+        let summary = to_summary(&state, screen, today).await?;
         out.push(AdminScreenEntry {
             slug: summary.slug,
             title: summary.title,
-            picture_url,
             archived: summary.archived,
             phase: summary.phase,
             starts_on: summary.starts_on,
